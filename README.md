@@ -5,9 +5,9 @@ app) so you can use it on your phone without ever shipping an iOS app to the
 App Store.
 
 - **Stack:** Vite + React + TypeScript
-- **Auth:** Sign in with Google (no usernames / passwords to manage)
-- **Storage:** `localStorage`, namespaced by Google account ID — different
-  Google accounts signing in on the same device get isolated data
+- **Auth:** Firebase Auth (Google provider) — no usernames / passwords to manage
+- **Storage:** Firestore, scoped per user — programs and logged instances live
+  under `users/{uid}/...` and sync live across all your devices
 - **Mobile:** installs to the iOS / Android home screen and runs full-screen
   via the included Web App Manifest + service worker
 
@@ -15,14 +15,14 @@ App Store.
 
 ```sh
 npm install
-cp .env.example .env.local   # then paste your Google Client ID (see below)
+# Create .env.local with your Firebase web config (see "Firebase setup" below)
 npm run dev
 ```
 
 Open the URL it prints (default `http://localhost:5173`). You'll see the login
 screen. Click "Continue with Google", pick an account, and you'll land in an
-empty lift log + goal list — your own. Sign out and back in with a different
-Google account and you'll see a separate (also empty) data set.
+empty programs list — your own. Sign out and back in with a different Google
+account and you'll see a separate (also empty) data set.
 
 ```sh
 npm run build      # type-check + production build → dist/
@@ -36,103 +36,111 @@ If you ever want to regenerate the PWA icons (e.g. you change the brand color):
 node scripts/gen-icons.mjs
 ```
 
-## Google Cloud setup (one-time, ~5 minutes)
+## Firebase setup (one-time)
 
-You need a Google OAuth Client ID so Google's "Sign in with Google" button
-knows which app is asking. It's free.
+You need a Firebase project for auth + Firestore. The free Spark plan is more
+than enough for personal use.
 
-1. Go to [console.cloud.google.com](https://console.cloud.google.com/) and
-   sign in with the Google account you want to own this project.
-2. Create a project (top bar dropdown → "New Project") — name it whatever, e.g.
-   "Zenith".
-3. Configure the OAuth consent screen:
-   - Left sidebar → **APIs & Services → OAuth consent screen**.
-   - User type: **External**. Click Create.
-   - Fill in App name (Zenith), user support email, developer contact email.
-     Skip scopes and test users for now. Save.
-   - You don't need to publish/verify the app for personal use — anyone you
-     add as a "test user" can sign in. Add yourself + your friends'
-     Gmail addresses under **Test users**.
-4. Create the Client ID:
-   - Left sidebar → **APIs & Services → Credentials**.
-   - **+ Create Credentials → OAuth client ID**.
-   - Application type: **Web application**.
-   - Name: "Zenith web".
-   - **Authorized JavaScript origins** — add every URL the app will be served
-     from. At minimum:
-     - `http://localhost:5173` (dev)
-     - your deployed URL once you have one (e.g. `https://zenith.vercel.app`)
-   - Click Create. Copy the **Client ID**.
-5. Paste it into `.env.local`:
+1. Go to [console.firebase.google.com](https://console.firebase.google.com)
+   and create a new project (any name, e.g. "Zenith").
+2. **Enable Authentication:**
+   - Left sidebar → **Authentication** → **Get started**.
+   - **Sign-in method** tab → click **Google** → toggle Enable, fill in
+     project public-facing name + support email → **Save**.
+3. **Enable Firestore:**
+   - Left sidebar → **Firestore Database** → **Create database** → start in
+     **production mode** → pick a region close to you.
+4. **Lock down access** — Firestore Database → **Rules** tab, replace with:
    ```
-   VITE_GOOGLE_CLIENT_ID=123456789-abc...apps.googleusercontent.com
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /users/{userId}/{document=**} {
+         allow read, write: if request.auth != null && request.auth.uid == userId;
+       }
+     }
+   }
    ```
-6. Restart `npm run dev` so Vite picks up the new env var.
+   Click **Publish**. Each user can only touch their own `users/{uid}/...`
+   subtree.
+5. **Register a web app:**
+   - Project Overview → **+ Add app** → web (`</>`) icon.
+   - Nickname: anything. Skip Firebase Hosting.
+   - Copy the `firebaseConfig` object it shows.
+6. **Paste config into `.env.local`:**
+   ```
+   VITE_FIREBASE_API_KEY=...
+   VITE_FIREBASE_AUTH_DOMAIN=<project>.firebaseapp.com
+   VITE_FIREBASE_PROJECT_ID=<project>
+   VITE_FIREBASE_APP_ID=1:...:web:...
+   ```
+7. Restart `npm run dev` so Vite picks up the new env vars.
 
-When you deploy, set `VITE_GOOGLE_CLIENT_ID` as an environment variable in
-your hosting provider (Vercel/Cloudflare/Netlify all have a UI for this) and
-add the deployed origin to "Authorized JavaScript origins" in step 4.
+When you deploy, set the same four env vars in your hosting provider and add
+the deployed origin to **Authentication → Settings → Authorized domains** in
+the Firebase console (otherwise sign-in popups will fail with
+`auth/unauthorized-domain`).
 
 ## How the per-user storage works
 
-There's no backend. All data lives in the browser's `localStorage`, keyed by
-the Google account's stable subject ID (`sub`):
+All programs and logged instances live in Firestore under the signed-in
+user's Firebase Auth UID:
 
 ```
-zenith:v1:auth                       → currently signed-in user
-zenith:v1:user:<googleSub>:lifts     → LiftEntry[]
-zenith:v1:user:<googleSub>:goals     → Goal[]
+users/{uid}/programs/{programId}     → Program docs
+users/{uid}/instances/{instanceId}   → Instance docs (one per logged session)
 ```
 
-So if you and a friend share a phone, you each "Sign in with Google" with your
-own account and only see your own data. Sign out swaps the active session.
-See `src/storage.ts` and `src/auth.ts`.
+Reads use `onSnapshot`, so changes from another device propagate live — log a
+workout on your phone and the laptop updates without reloading. The security
+rules above mean a user's data is only readable / writable by that user.
 
-**Important caveat:** because everything runs client-side, "Sign in with
-Google" here is for *identity / UX* (which localStorage bucket are we
-reading?), not server-enforced security. The data isn't actually protected
-from someone with hands-on access to the phone — they could open dev tools or
-clear storage. That's fine for "me and my friends tracking lifts on our own
-phones." When you eventually add a backend for cross-device sync, the backend
-will verify the Google ID token server-side and that's where real auth kicks
-in.
+See `src/storage.ts`, `src/auth.ts`, and `src/firebase.ts`.
+
+### Export / import
+
+The "Export" button downloads everything in your account as JSON. "Import"
+takes that file and merges it back in (existing records win on conflict, so
+re-importing the same file is a safe no-op). Useful for backups or migrating
+between accounts.
 
 ## Hosting it so your friends can use it on their phones
 
 Pick one — all are free for this kind of project. **In every case, after
-deploying, go back to the Google Cloud Credentials page and add the deployed
-URL to your OAuth client's "Authorized JavaScript origins."**
+deploying, go to Firebase Console → Authentication → Settings → Authorized
+domains and add the deployed origin** so sign-in popups work.
 
 ### Option A — Vercel (recommended, easiest)
 
 1. Push this repo to GitHub.
 2. Go to [vercel.com](https://vercel.com), sign in with GitHub, "Add New
    Project", pick this repo.
-3. Vercel auto-detects Vite. Under "Environment Variables" add
-   `VITE_GOOGLE_CLIENT_ID` = your client ID. Click Deploy.
-4. You get a `https://<project>.vercel.app` URL. Every push to `main` redeploys
-   automatically.
+3. Vercel auto-detects Vite. Under "Environment Variables" add the four
+   `VITE_FIREBASE_*` values from your `.env.local`. Click Deploy.
+4. You get a `https://<project>.vercel.app` URL. Every push to `main`
+   redeploys automatically. Vite bakes env vars in at build time, so adding
+   or changing them requires a redeploy.
 
 ### Option B — Cloudflare Pages
 
 1. Push to GitHub.
 2. [pages.cloudflare.com](https://pages.cloudflare.com) → "Create project" →
    connect your repo.
-3. Build command: `npm run build`. Output dir: `dist`. Add the
-   `VITE_GOOGLE_CLIENT_ID` environment variable.
+3. Build command: `npm run build`. Output dir: `dist`. Add the four
+   `VITE_FIREBASE_*` environment variables.
 4. You get a `https://<project>.pages.dev` URL.
 
 ### Option C — Netlify
 
-Same flow. Build command `npm run build`, publish directory `dist`. Add
-`VITE_GOOGLE_CLIENT_ID` under Site settings → Environment variables.
+Same flow. Build command `npm run build`, publish directory `dist`. Add the
+four `VITE_FIREBASE_*` vars under Site settings → Environment variables.
 
 ### Option D — GitHub Pages (cheapest, slightly fiddly)
 
 Works fine for this app since it's a pure SPA. You'll need to set Vite's
 `base` to the repo name in `vite.config.ts` and add a GitHub Actions workflow
-to publish `dist/` to the `gh-pages` branch. For env vars you'd inject the
-client ID at build time via Actions secrets.
+to publish `dist/` to the `gh-pages` branch. Inject env vars at build time
+via Actions secrets.
 
 ## Installing it on a phone (no App Store needed)
 
@@ -154,17 +162,31 @@ client ID at build time via Actions secrets.
 
 ```
 src/
-  App.tsx              top-level component; gates on auth, wires state to storage
-  auth.ts              Google Identity Services wrapper + session persistence
-  storage.ts           per-user localStorage (lifts, goals)
-  types.ts             LiftEntry, Goal
+  App.tsx              top-level component; gates on auth, subscribes to Firestore
+  auth.ts              Firebase Auth wrapper (Google provider)
+  firebase.ts          Firebase app init from env vars
+  storage.ts           Firestore reads / writes / live subscriptions
+  types.ts             Program, Exercise, PlannedSet, Instance, …
+  templates.ts         starter program templates
+  today.ts             "what's scheduled today" helpers
   index.css            mobile-first styles
   main.tsx             React entry point
   components/
-    Login.tsx          sign-in screen with Google button
+    Login.tsx          sign-in screen
     SignedInBar.tsx    header showing avatar + name + sign-out
-    LiftLog.tsx        log-a-lift form + recent list
-    Goals.tsx          goal list with toggle
+    DataMenu.tsx       export / import buttons
+    Home.tsx           program list + adherence rings
+    NewProgram.tsx     create-a-program form
+    ProgramDetail.tsx  view / edit a program; per-exercise log button
+    ExerciseForm.tsx   add / edit a single exercise
+    SchedulePicker.tsx weekday picker
+    SetEditor.tsx      planned-sets editor
+    LogInstance.tsx    log-a-session form
+    TodayScreen.tsx    today's scheduled exercises
+    TodayBox.tsx       home-screen "today" summary
+    TodayExerciseCard  inline log card on the today screen
+    AdherenceRings.tsx weekly adherence visualization
+    ProgressRing.tsx   single-ring SVG primitive
 public/
   pwa-*.png            PWA icons (used by manifest)
   apple-touch-icon.png iOS home-screen icon
@@ -172,16 +194,3 @@ public/
 scripts/
   gen-icons.mjs        regenerates the icons above
 ```
-
-## When you outgrow localStorage
-
-Flagging the obvious limits so future-you isn't surprised:
-
-- **No cross-device sync.** Switch to IndexedDB + a sync backend (Supabase is
-  the lowest-friction option, and it has built-in Google OAuth) when you
-  want this.
-- **localStorage caps at ~5 MB per origin.** Plenty for thousands of lifts;
-  not fine for photos/videos.
-- **Auth is identity-only.** Adding a backend turns Google sign-in into real
-  enforced auth — the server validates the Google ID token before serving
-  any data.
