@@ -283,6 +283,13 @@ header.top {
   gap: 12px;
 }
 
+.data-menu {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  justify-content: flex-end;
+}
+
 .signed-in-bar .user {
   display: flex;
   align-items: center;

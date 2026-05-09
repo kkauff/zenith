@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Login } from './components/Login';
 import { SignedInBar } from './components/SignedInBar';
+import { DataMenu } from './components/DataMenu';
 import { Home } from './components/Home';
 import { NewProgram } from './components/NewProgram';
 import { ProgramDetail } from './components/ProgramDetail';
@@ -32,17 +33,23 @@ function NotFound({ onHome }: { onHome: () => void }) {
 
 export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [instances, setInstances] = useState<Instance[]>([]);
   const [view, setView] = useState<View>({ kind: 'home' });
 
-  // Restore session on first load.
+  // Subscribe to Firebase auth state. Fires once on mount with the current
+  // session (or null), then again on every sign-in/sign-out.
   useEffect(() => {
-    setUser(auth.loadSession());
+    return auth.subscribeAuth((u) => {
+      setUser(u);
+      setAuthReady(true);
+    });
   }, []);
 
-  // Whenever the signed-in user changes, swap the data we display. Storage is
-  // keyed by Google `sub`, so a different account is a different bucket.
+  // While signed in, keep state synced with Firestore via onSnapshot. Both
+  // listeners auto-fire on remote changes too — so logging on phone updates
+  // laptop and vice-versa.
   useEffect(() => {
     if (!user) {
       setPrograms([]);
@@ -50,51 +57,44 @@ export default function App() {
       setView({ kind: 'home' });
       return;
     }
-    setPrograms(store.loadPrograms(user.sub));
-    setInstances(store.loadInstances(user.sub));
+    const unsubP = store.subscribePrograms(user.sub, setPrograms);
+    const unsubI = store.subscribeInstances(user.sub, setInstances);
+    return () => {
+      unsubP();
+      unsubI();
+    };
   }, [user]);
 
-  const refresh = () => {
-    if (!user) return;
-    setPrograms(store.loadPrograms(user.sub));
-    setInstances(store.loadInstances(user.sub));
+  const signOut = async () => {
+    await auth.signOut();
   };
 
-  const signOut = () => {
-    auth.clearSession();
-    setUser(null);
-  };
-
-  const createProgram = (fields: Omit<Program, 'id' | 'createdAt'>) => {
+  const createProgram = async (fields: Omit<Program, 'id' | 'createdAt'>) => {
     if (!user) return;
-    const program = store.createProgram(user.sub, fields);
-    refresh();
+    const program = await store.createProgram(user.sub, fields);
     setView({ kind: 'program', programId: program.id });
   };
 
-  const updateProgram = (program: Program) => {
+  const updateProgram = async (program: Program) => {
     if (!user) return;
-    store.updateProgram(user.sub, program);
-    refresh();
+    await store.updateProgram(user.sub, program);
   };
 
-  const deleteProgram = (programId: string) => {
+  const deleteProgram = async (programId: string) => {
     if (!user) return;
-    store.deleteProgram(user.sub, programId);
-    refresh();
+    await store.deleteProgram(user.sub, programId);
     setView({ kind: 'home' });
   };
 
-  // Records an instance and refreshes state — does NOT navigate. Today screen
-  // and inline logging want to stay put. Screens that should navigate after
-  // logging do it themselves.
-  const addInstance = (fields: Omit<Instance, 'id' | 'loggedAt'>) => {
+  // Records an instance — does NOT navigate. Today screen and inline logging
+  // stay put; screens that should navigate after logging do it themselves.
+  const addInstance = async (fields: Omit<Instance, 'id' | 'loggedAt'>) => {
     if (!user) return;
-    store.addInstance(user.sub, fields);
-    refresh();
+    await store.addInstance(user.sub, fields);
   };
 
-  if (!user) return <Login onSignIn={setUser} />;
+  if (!authReady) return null;
+  if (!user) return <Login />;
 
   const goHome = () => setView({ kind: 'home' });
   const today = new Date();
@@ -170,6 +170,7 @@ export default function App() {
         <h1>Zenith</h1>
       </header>
       <SignedInBar user={user} onSignOut={signOut} />
+      <DataMenu userId={user.sub} />
       {body}
     </main>
   );

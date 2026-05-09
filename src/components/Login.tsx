@@ -1,21 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
-import { getClientId, initSignInButton, type AuthUser } from '../auth';
+import { useState } from 'react';
+import * as auth from '../auth';
 
-type Props = {
-  onSignIn: (user: AuthUser) => void;
-};
-
-export function Login({ onSignIn }: Props) {
-  const buttonRef = useRef<HTMLDivElement | null>(null);
+export function Login() {
   const [error, setError] = useState<string | null>(null);
-  const clientId = getClientId();
+  const [signingIn, setSigningIn] = useState(false);
 
-  useEffect(() => {
-    if (!clientId || !buttonRef.current) return;
-    initSignInButton(buttonRef.current, clientId, onSignIn).catch((e) => {
-      setError(e instanceof Error ? e.message : 'Sign-in failed to load');
-    });
-  }, [clientId, onSignIn]);
+  const handleSignIn = async () => {
+    setError(null);
+    setSigningIn(true);
+    try {
+      await auth.signIn();
+      // App.tsx is subscribed to auth state and will swap to the signed-in
+      // view automatically.
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Sign-in failed');
+    } finally {
+      setSigningIn(false);
+    }
+  };
 
   return (
     <div className="login">
@@ -23,18 +25,23 @@ export function Login({ onSignIn }: Props) {
         <h1>Zenith</h1>
         <p className="muted">Lift logging and goal tracking.</p>
 
-        {!clientId ? (
+        {!auth.isConfigured ? (
           <div className="config-warning">
             <strong>Set up needed.</strong>
             <p className="muted">
-              Add your Google OAuth Client ID to <code>.env.local</code> as
+              Add your Firebase config to <code>.env.local</code>:
               <br />
-              <code>VITE_GOOGLE_CLIENT_ID</code>. See the README for setup steps.
+              <code>VITE_FIREBASE_API_KEY</code>,{' '}
+              <code>VITE_FIREBASE_AUTH_DOMAIN</code>,{' '}
+              <code>VITE_FIREBASE_PROJECT_ID</code>,{' '}
+              <code>VITE_FIREBASE_APP_ID</code>.
             </p>
           </div>
         ) : (
           <>
-            <div ref={buttonRef} className="google-btn-wrap" />
+            <button onClick={handleSignIn} disabled={signingIn}>
+              {signingIn ? 'Signing in…' : 'Continue with Google'}
+            </button>
             <p className="muted small">
               Signing in with Google is the same as creating an account — Google
               handles the password, we just remember which account is yours.

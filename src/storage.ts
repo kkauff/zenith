@@ -1,47 +1,47 @@
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+  writeBatch,
+} from 'firebase/firestore';
+import { db } from './firebase';
 import type { Exercise, Instance, PlannedSet, Program } from './types';
 
-// Versioned namespace lets us evolve the schema later without colliding with
-// stale localStorage from earlier iterations. Per-user data is keyed by the
-// Google `sub` (subject identifier), so every Google account that signs in on
-// this device gets its own isolated bucket.
-const NS = 'zenith:v1';
+// Firestore layout:
+//   users/{uid}/programs/{programId}
+//   users/{uid}/instances/{instanceId}
+// `uid` is the Firebase Auth UID (passed in as `userId` to keep the storage
+// API caller-agnostic — the auth layer chooses what string to use).
 
-const KEYS = {
-  programs: (userId: string) => `${NS}:user:${userId}:programs`,
-  instances: (userId: string) => `${NS}:user:${userId}:instances`,
-};
-
-function read<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
+function programsCol(userId: string) {
+  if (!db) throw new Error('Firestore is not configured.');
+  return collection(db, 'users', userId, 'programs');
 }
 
-function write<T>(key: string, value: T): void {
-  localStorage.setItem(key, JSON.stringify(value));
+function instancesCol(userId: string) {
+  if (!db) throw new Error('Firestore is not configured.');
+  return collection(db, 'users', userId, 'instances');
 }
 
 export function uid(): string {
   return crypto.randomUUID();
 }
 
-// Translate old exercise shapes to current shape on read so programs created
-// before the schema change still work. Cheap insurance — no-op once data is
-// already in the new shape.
+// Translate older program shapes to the current shape on read so imports of
+// older exports still work.
 function migrateExercise(raw: unknown): Exercise {
   const e = raw as Record<string, unknown>;
-  // Planned-sets shape exists; just backfill trackingType if missing (older
-  // shape predates the weight/time toggle).
   if (Array.isArray(e.plannedSets)) {
     if (e.trackingType !== 'weight' && e.trackingType !== 'time') {
       return { ...(e as unknown as Exercise), trackingType: 'weight' };
     }
     return e as unknown as Exercise;
   }
-  // Oldest shape: targetSets + targetReps. Translate to a planned-set list.
   const targetSets = Math.max(1, Number(e.targetSets) || 1);
   const targetReps = Math.max(1, Number(e.targetReps) || 1);
   const goalWeight =
@@ -64,74 +64,187 @@ function migrateProgram(p: Program): Program {
   return { ...p, exercises: (p.exercises ?? []).map(migrateExercise) };
 }
 
+// Firestore disallows `undefined`. Strip undefined fields recursively so we
+// can pass through user-shaped objects (Exercise, PlannedSet, …) that may
+// legitimately omit optional values.
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((v) => stripUndefined(v)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== undefined) out[k] = stripUndefined(v);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 // --- Programs ------------------------------------------------------------
 
-export function loadPrograms(userId: string): Program[] {
-  return read<Program[]>(KEYS.programs(userId), []).map(migrateProgram);
+export function subscribePrograms(
+  userId: string,
+  cb: (programs: Program[]) => void,
+): () => void {
+  const q = query(programsCol(userId), orderBy('createdAt', 'asc'));
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => migrateProgram(d.data() as Program)));
+  });
 }
 
-export function getProgram(userId: string, programId: string): Program | undefined {
-  return loadPrograms(userId).find((p) => p.id === programId);
-}
-
-export function createProgram(
+export async function createProgram(
   userId: string,
   fields: Omit<Program, 'id' | 'createdAt'>,
-): Program {
+): Promise<Program> {
   const program: Program = { ...fields, id: uid(), createdAt: Date.now() };
-  const programs = loadPrograms(userId);
-  programs.push(program);
-  write(KEYS.programs(userId), programs);
+  await setDoc(doc(programsCol(userId), program.id), stripUndefined(program));
   return program;
 }
 
-export function updateProgram(userId: string, program: Program): void {
-  const programs = loadPrograms(userId).map((p) =>
-    p.id === program.id ? program : p,
-  );
-  write(KEYS.programs(userId), programs);
+export async function updateProgram(
+  userId: string,
+  program: Program,
+): Promise<void> {
+  await setDoc(doc(programsCol(userId), program.id), stripUndefined(program));
 }
 
-export function deleteProgram(userId: string, programId: string): void {
-  write(
-    KEYS.programs(userId),
-    loadPrograms(userId).filter((p) => p.id !== programId),
-  );
-  // Cascade: remove instances belonging to this program.
-  write(
-    KEYS.instances(userId),
-    loadInstances(userId).filter((i) => i.programId !== programId),
-  );
+export async function deleteProgram(
+  userId: string,
+  programId: string,
+): Promise<void> {
+  // Cascade: remove instances belonging to this program. Done in a batch so a
+  // partial failure doesn't orphan instances.
+  if (!db) throw new Error('Firestore is not configured.');
+  const instancesSnap = await getDocs(instancesCol(userId));
+  const batch = writeBatch(db);
+  batch.delete(doc(programsCol(userId), programId));
+  instancesSnap.docs.forEach((d) => {
+    if ((d.data() as Instance).programId === programId) {
+      batch.delete(d.ref);
+    }
+  });
+  await batch.commit();
 }
 
 // --- Instances -----------------------------------------------------------
 
-export function loadInstances(userId: string): Instance[] {
-  return read<Instance[]>(KEYS.instances(userId), []);
+export function subscribeInstances(
+  userId: string,
+  cb: (instances: Instance[]) => void,
+): () => void {
+  const q = query(instancesCol(userId), orderBy('loggedAt', 'desc'));
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => d.data() as Instance));
+  });
 }
 
-export function loadInstancesForProgram(userId: string, programId: string): Instance[] {
-  return loadInstances(userId).filter((i) => i.programId === programId);
-}
-
-export function loadInstancesForExercise(userId: string, exerciseId: string): Instance[] {
-  return loadInstances(userId).filter((i) => i.exerciseId === exerciseId);
-}
-
-export function addInstance(
+export async function addInstance(
   userId: string,
   fields: Omit<Instance, 'id' | 'loggedAt'>,
-): Instance {
+): Promise<Instance> {
   const instance: Instance = { ...fields, id: uid(), loggedAt: Date.now() };
-  const instances = loadInstances(userId);
-  instances.unshift(instance);
-  write(KEYS.instances(userId), instances);
+  await setDoc(doc(instancesCol(userId), instance.id), stripUndefined(instance));
   return instance;
 }
 
-export function deleteInstance(userId: string, id: string): void {
-  write(
-    KEYS.instances(userId),
-    loadInstances(userId).filter((i) => i.id !== id),
+export async function deleteInstance(userId: string, id: string): Promise<void> {
+  await deleteDoc(doc(instancesCol(userId), id));
+}
+
+// --- Export / Import -----------------------------------------------------
+
+export const EXPORT_VERSION = 1;
+
+export type ExportFile = {
+  format: 'zenith';
+  version: number;
+  exportedAt: string;
+  programs: Program[];
+  instances: Instance[];
+};
+
+export type ImportSummary = {
+  programsAdded: number;
+  programsSkipped: number;
+  instancesAdded: number;
+  instancesSkipped: number;
+};
+
+export async function exportData(userId: string): Promise<ExportFile> {
+  const [progSnap, instSnap] = await Promise.all([
+    getDocs(programsCol(userId)),
+    getDocs(instancesCol(userId)),
+  ]);
+  return {
+    format: 'zenith',
+    version: EXPORT_VERSION,
+    exportedAt: new Date().toISOString(),
+    programs: progSnap.docs.map((d) => d.data() as Program),
+    instances: instSnap.docs.map((d) => d.data() as Instance),
+  };
+}
+
+export function parseImportFile(raw: string): ExportFile {
+  const data = JSON.parse(raw) as Partial<ExportFile>;
+  if (data.format !== 'zenith') {
+    throw new Error('Not a Zenith export file.');
+  }
+  if (typeof data.version !== 'number' || data.version > EXPORT_VERSION) {
+    throw new Error(`Unsupported export version: ${String(data.version)}`);
+  }
+  if (!Array.isArray(data.programs) || !Array.isArray(data.instances)) {
+    throw new Error('Export file is missing programs or instances.');
+  }
+  return data as ExportFile;
+}
+
+// Merge by id. Existing records win on conflict — re-importing the same file
+// is a safe no-op. Writes go through a single batch per collection so the
+// import either lands fully or not at all.
+export async function importData(
+  userId: string,
+  file: ExportFile,
+): Promise<ImportSummary> {
+  if (!db) throw new Error('Firestore is not configured.');
+
+  const [progSnap, instSnap] = await Promise.all([
+    getDocs(programsCol(userId)),
+    getDocs(instancesCol(userId)),
+  ]);
+  const existingProgramIds = new Set(progSnap.docs.map((d) => d.id));
+  const existingInstanceIds = new Set(instSnap.docs.map((d) => d.id));
+
+  const newPrograms = file.programs
+    .map(migrateProgram)
+    .filter((p) => !existingProgramIds.has(p.id));
+  const newInstances = file.instances.filter(
+    (i) => !existingInstanceIds.has(i.id),
   );
+
+  // Firestore batches cap at 500 ops; chunk to be safe.
+  const all = [
+    ...newPrograms.map((p) => ({
+      ref: doc(programsCol(userId), p.id),
+      data: stripUndefined(p),
+    })),
+    ...newInstances.map((i) => ({
+      ref: doc(instancesCol(userId), i.id),
+      data: stripUndefined(i),
+    })),
+  ];
+  for (let i = 0; i < all.length; i += 450) {
+    const batch = writeBatch(db);
+    for (const { ref, data } of all.slice(i, i + 450)) {
+      batch.set(ref, data);
+    }
+    await batch.commit();
+  }
+
+  return {
+    programsAdded: newPrograms.length,
+    programsSkipped: file.programs.length - newPrograms.length,
+    instancesAdded: newInstances.length,
+    instancesSkipped: file.instances.length - newInstances.length,
+  };
 }
