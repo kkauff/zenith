@@ -7,6 +7,9 @@ import { NewProgram } from './components/NewProgram';
 import { ProgramDetail } from './components/ProgramDetail';
 import { LogInstance } from './components/LogInstance';
 import { TodayScreen } from './components/TodayScreen';
+import { Brand } from './components/ui/brand';
+import { Button } from './components/ui/button';
+import { Card } from './components/ui/card';
 import * as auth from './auth';
 import * as store from './storage';
 import type { AuthUser } from './auth';
@@ -21,13 +24,13 @@ type View =
 
 function NotFound({ onHome }: { onHome: () => void }) {
   return (
-    <section className="card empty-card">
-      <h2>Not found</h2>
-      <p className="muted">
+    <Card className="mt-4 text-center flex flex-col items-center gap-3 py-8">
+      <h2 className="text-lg font-semibold m-0">Not found</h2>
+      <p className="text-sm text-muted-foreground">
         That program or exercise no longer exists. It may have been deleted.
       </p>
-      <button onClick={onHome}>Back to home</button>
-    </section>
+      <Button onClick={onHome}>Back to home</Button>
+    </Card>
   );
 }
 
@@ -166,8 +169,15 @@ export default function App() {
 
   return (
     <main>
-      <header className="top">
-        <h1>Zenith</h1>
+      <header className="flex items-center justify-between gap-3 pt-1">
+        <button
+          type="button"
+          onClick={goHome}
+          aria-label="Home"
+          className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+        >
+          <Brand as="h1" className="text-3xl leading-none m-0" />
+        </button>
       </header>
       <SignedInBar user={user} onSignOut={signOut} />
       <DataMenu userId={user.sub} />

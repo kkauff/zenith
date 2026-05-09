@@ -1,3 +1,4 @@
+import { ChevronRight, Moon } from 'lucide-react';
 import type { Instance, Program } from '../types';
 import { dayName, exercisesForDay, instancesOnDay } from '../today';
 
@@ -19,13 +20,13 @@ export function TodayBox({ programs, instances, today, onOpen }: Props) {
 
   if (total === 0) {
     return (
-      <section className="card today-box today-rest">
-        <div className="today-rest-icon" aria-hidden>
-          🌿
-        </div>
+      <section className="flex items-center gap-4 rounded-lg border border-border/60 bg-card p-4">
+        <Moon aria-hidden className="size-7 text-primary" />
         <div>
-          <div className="today-title">{dayName(today)}</div>
-          <div className="muted small">Nothing scheduled — rest day.</div>
+          <div className="text-xl font-bold tracking-tight">{dayName(today)}</div>
+          <div className="text-xs text-muted-foreground">
+            Nothing scheduled — rest day.
+          </div>
         </div>
       </section>
     );
@@ -36,20 +37,27 @@ export function TodayBox({ programs, instances, today, onOpen }: Props) {
   const more = scheduled.length - previewNames.length;
 
   return (
-    <button className="card today-box today-active" onClick={onOpen}>
-      <div className="today-text">
-        <div className="today-title">{dayName(today)} Goals</div>
-        <div className="today-summary">
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex w-full items-center gap-4 rounded-lg border border-primary/40 bg-primary/10 p-5 text-left shadow-glow-primary-sm transition-all hover:border-primary/60 hover:shadow-glow-primary active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+    >
+      <div className="flex-1 min-w-0">
+        <div className="text-xl font-bold tracking-tight text-primary text-glow-primary">
+          {dayName(today)} Goals
+        </div>
+        <div className="text-base font-semibold mt-0.5">
           {done} of {total} done
         </div>
-        <div className="muted small today-preview">
+        <div className="mt-1.5 truncate text-xs text-muted-foreground">
           {previewNames.join(' · ')}
           {more > 0 ? ` · +${more} more` : ''}
         </div>
       </div>
-      <span className="chev today-chev" aria-hidden>
-        ›
-      </span>
+      <ChevronRight
+        aria-hidden
+        className="size-7 text-primary flex-shrink-0"
+      />
     </button>
   );
 }

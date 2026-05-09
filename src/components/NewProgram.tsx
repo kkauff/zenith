@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ArrowLeft, Pencil, Plus, X } from 'lucide-react';
 import type { Exercise, Program } from '../types';
 import { ExerciseForm } from './ExerciseForm';
 import {
@@ -7,6 +8,10 @@ import {
   formatPlannedSets,
   formatSchedule,
 } from '../templates';
+import { Button } from './ui/button';
+import { Card, CardHeader, CardTitle } from './ui/card';
+import { Input } from './ui/input';
+import { Select } from './ui/select';
 
 type Props = {
   onCreate: (program: Omit<Program, 'id' | 'createdAt'>) => void;
@@ -39,61 +44,65 @@ export function NewProgram({ onCreate, onCancel }: Props) {
   };
 
   return (
-    <div className="stack">
-      <header className="screen-header">
-        <button type="button" className="secondary" onClick={onCancel}>
-          ← Back
-        </button>
-        <h1>New program</h1>
+    <div className="space-y-3 mt-3">
+      <header className="flex items-center gap-3">
+        <Button variant="secondary" size="sm" onClick={onCancel}>
+          <ArrowLeft aria-hidden /> Back
+        </Button>
+        <h1 className="flex-1 truncate text-xl font-bold tracking-tight m-0">
+          New program
+        </h1>
       </header>
 
-      <section className="card">
-        <h2>Category</h2>
-        <select
+      <Card>
+        <CardTitle className="mb-2">Category</CardTitle>
+        <Select
           value={categoryKey}
           onChange={(e) => setCategoryKey(e.target.value)}
           aria-label="Category"
         >
           {CATEGORIES.filter((c) => c.available).map((c) => (
             <option key={c.key} value={c.key}>
-              {c.icon} {c.name}
+              {c.name}
             </option>
           ))}
-        </select>
-        <p className="muted small" style={{ marginTop: 8 }}>
+        </Select>
+        <p className="mt-2 text-xs text-muted-foreground m-0">
           More categories coming soon.
         </p>
-      </section>
+      </Card>
 
-      <section className="card">
-        <h2>Program name</h2>
-        <input
+      <Card>
+        <CardTitle className="mb-2">Program name</CardTitle>
+        <Input
           placeholder="e.g. 5x5, Push/Pull/Legs"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-      </section>
+      </Card>
 
-      <section className="card">
-        <div className="card-header">
-          <h2>Exercises</h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>Exercises</CardTitle>
           {!adding && editingId === null && (
-            <button type="button" onClick={() => setAdding(true)}>
-              + Add
-            </button>
+            <Button size="sm" onClick={() => setAdding(true)}>
+              <Plus aria-hidden /> Add
+            </Button>
           )}
-        </div>
+        </CardHeader>
 
         {exercises.length === 0 && !adding && (
-          <p className="empty">Add at least one exercise to save the program.</p>
+          <p className="italic text-sm text-muted-foreground py-2 m-0">
+            Add at least one exercise to save the program.
+          </p>
         )}
 
         {exercises.length > 0 && (
-          <ul className="list">
+          <ul className="flex flex-col gap-2 list-none m-0 p-0">
             {exercises.map((ex) => {
               if (editingId === ex.id) {
                 return (
-                  <li key={ex.id} className="inline-form-row">
+                  <li key={ex.id} className="rounded-lg bg-surface2 p-3.5">
                     <ExerciseForm
                       categoryKey={categoryKey}
                       initial={ex}
@@ -110,34 +119,37 @@ export function NewProgram({ onCreate, onCancel }: Props) {
                     ? ` · goal ${ex.goalWeight} lb`
                     : '';
               return (
-                <li key={ex.id} className="exercise-row">
-                  <div className="exercise-row-main">
+                <li
+                  key={ex.id}
+                  className="flex items-start gap-2 rounded-lg bg-surface2 p-3.5"
+                >
+                  <div className="flex-1 min-w-0">
                     <div>
-                      <strong>{ex.name}</strong>
+                      <strong className="font-semibold">{ex.name}</strong>
                     </div>
-                    <div className="muted small">
+                    <div className="text-xs text-muted-foreground">
                       {formatSchedule(ex.schedule.days)} ·{' '}
                       {formatPlannedSets(ex.plannedSets, ex.trackingType)}
                       {goal}
                     </div>
                   </div>
-                  <div className="exercise-row-actions">
-                    <button
-                      type="button"
-                      className="secondary"
+                  <div className="flex flex-col gap-1.5">
+                    <Button
+                      variant="secondary"
+                      size="iconSm"
                       onClick={() => setEditingId(ex.id)}
                       aria-label={`Edit ${ex.name}`}
                     >
-                      ✎
-                    </button>
-                    <button
-                      type="button"
-                      className="icon"
+                      <Pencil aria-hidden />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="iconSm"
                       aria-label={`Remove ${ex.name}`}
                       onClick={() => removeExercise(ex.id)}
                     >
-                      ✕
-                    </button>
+                      <X aria-hidden />
+                    </Button>
                   </div>
                 </li>
               );
@@ -146,7 +158,7 @@ export function NewProgram({ onCreate, onCancel }: Props) {
         )}
 
         {adding && (
-          <div className="inline-form">
+          <div className="mt-3 rounded-lg bg-surface2 p-3.5">
             <ExerciseForm
               categoryKey={categoryKey}
               onSave={(ex) => {
@@ -157,11 +169,11 @@ export function NewProgram({ onCreate, onCancel }: Props) {
             />
           </div>
         )}
-      </section>
+      </Card>
 
-      <button type="button" onClick={submit} disabled={!canSave}>
+      <Button onClick={submit} disabled={!canSave} className="w-full">
         Save program
-      </button>
+      </Button>
     </div>
   );
 }

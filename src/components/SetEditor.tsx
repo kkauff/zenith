@@ -1,6 +1,9 @@
 import { useState } from 'react';
+import { Plus, X } from 'lucide-react';
 import type { Exercise, InstanceSet } from '../types';
 import { parseDuration, splitDuration } from '../templates';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
 
 type Props = {
   exercise: Exercise;
@@ -84,84 +87,96 @@ export function SetEditor({
 
   return (
     <>
-      <div className="set-list">
-        <div className="set-row set-row-header">
-          <span>Set</span>
+      <div className="flex flex-col gap-2 my-2">
+        <div
+          className="grid items-center gap-2 text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold"
+          style={{ gridTemplateColumns: '36px 1fr 1fr 36px' }}
+        >
+          <span className="text-center">Set</span>
           {isTime ? (
             <>
-              <span>Min</span>
-              <span>Sec</span>
+              <span className="pl-1">Min</span>
+              <span className="pl-1">Sec</span>
             </>
           ) : (
             <>
-              <span>Weight</span>
-              <span>Reps</span>
+              <span className="pl-1">Weight</span>
+              <span className="pl-1">Reps</span>
             </>
           )}
           <span />
         </div>
         {sets.map((s, i) => (
-          <div className="set-row" key={i}>
-            <span className="set-num">{i + 1}</span>
+          <div
+            key={i}
+            className="grid items-center gap-2"
+            style={{ gridTemplateColumns: '36px 1fr 1fr 36px' }}
+          >
+            <span className="text-center text-muted-foreground font-semibold">
+              {i + 1}
+            </span>
             {isTime ? (
               <>
-                <input
+                <Input
                   inputMode="numeric"
                   placeholder="0"
                   value={s.min}
                   onChange={(e) => updateSet(i, { min: e.target.value })}
+                  className="h-10 px-3 py-2"
                 />
-                <input
+                <Input
                   inputMode="numeric"
                   placeholder="30"
                   value={s.sec}
                   onChange={(e) => updateSet(i, { sec: e.target.value })}
+                  className="h-10 px-3 py-2"
                 />
               </>
             ) : (
               <>
-                <input
-                  inputMode="text"
+                <Input
                   placeholder="lb"
                   value={s.weight}
                   onChange={(e) => updateSet(i, { weight: e.target.value })}
+                  className="h-10 px-3 py-2"
                 />
-                <input
+                <Input
                   inputMode="numeric"
                   placeholder="reps"
                   value={s.reps}
                   onChange={(e) => updateSet(i, { reps: e.target.value })}
+                  className="h-10 px-3 py-2"
                 />
               </>
             )}
-            <button
-              type="button"
-              className="icon"
+            <Button
+              variant="ghost"
+              size="iconSm"
               aria-label={`Remove set ${i + 1}`}
               onClick={() => removeSet(i)}
               disabled={sets.length <= 1}
             >
-              ✕
-            </button>
+              <X aria-hidden />
+            </Button>
           </div>
         ))}
       </div>
-      <button type="button" className="secondary" onClick={addSet}>
-        + Add set
-      </button>
+      <Button variant="secondary" size="sm" onClick={addSet}>
+        <Plus aria-hidden /> Add set
+      </Button>
 
       {showNotes && (
-        <input
+        <Input
           placeholder="Notes (optional)"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          style={{ marginTop: 12 }}
+          className="mt-3"
         />
       )}
 
-      <button type="button" onClick={submit} style={{ marginTop: 12 }}>
+      <Button onClick={submit} className="mt-3 w-full">
         {saveLabel}
-      </button>
+      </Button>
     </>
   );
 }

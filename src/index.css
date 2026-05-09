@@ -1,758 +1,128 @@
-:root {
-  --bg: #0f172a;
-  --surface: #1e293b;
-  --surface-2: #273449;
-  --border: #334155;
-  --text: #e2e8f0;
-  --text-dim: #94a3b8;
-  --accent: #38bdf8;
-  --accent-press: #0ea5e9;
-  --danger: #f87171;
-  --radius: 12px;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-  color-scheme: dark;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  margin: 0;
-  padding: 0;
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100%;
-}
-
-body {
-  /* respect iOS safe areas */
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-
-#root {
-  max-width: 560px;
-  margin: 0 auto;
-  padding: 16px 16px 32px;
-}
-
-h1,
-h2,
-h3 {
-  margin: 0;
-}
-
-h1 {
-  font-size: 24px;
-  letter-spacing: -0.01em;
-}
-
-h2 {
-  font-size: 16px;
-  color: var(--text-dim);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 8px;
-}
-
-input,
-select,
-button {
-  font: inherit;
-  color: inherit;
-}
-
-input,
-select {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  width: 100%;
-  outline: none;
-}
-
-input:focus,
-select:focus {
-  border-color: var(--accent);
-}
-
-button {
-  background: var(--accent);
-  color: #001017;
-  border: none;
-  border-radius: var(--radius);
-  padding: 12px 16px;
-  font-weight: 600;
-  cursor: pointer;
-  /* big tap targets on mobile */
-  min-height: 44px;
-}
-
-button:active {
-  background: var(--accent-press);
-}
-
-button.secondary {
-  background: var(--surface-2);
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-
-button.icon {
-  background: transparent;
-  color: var(--text-dim);
-  padding: 8px;
-  min-height: 32px;
+/* Knewave Outline by Tyler Finck — The League of Moveable Type (OFL) */
+@font-face {
+  font-family: 'Knewave Outline';
+  src:
+    url('/fonts/knewave-outline.woff') format('woff'),
+    url('/fonts/knewave-outline.ttf') format('truetype');
   font-weight: 400;
-}
-
-button.icon:hover {
-  color: var(--danger);
-}
-
-.stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.row > * {
-  flex: 1;
-}
-
-section.card {
-  background: var(--surface);
-  border-radius: var(--radius);
-  padding: 16px;
-  margin-top: 16px;
-}
-
-ul.list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-ul.list li {
-  background: var(--surface-2);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
-
-.muted {
-  color: var(--text-dim);
-  font-size: 13px;
-}
-
-.empty {
-  color: var(--text-dim);
-  font-size: 14px;
-  font-style: italic;
-  padding: 8px 0;
-}
-
-header.top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.profile-bar {
-  background: var(--surface);
-  border-radius: var(--radius);
-  padding: 12px;
-  margin-top: 12px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.profile-bar select {
-  padding: 10px 12px;
-}
-
-.checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.checkbox input {
-  width: auto;
-  accent-color: var(--accent);
-  transform: scale(1.3);
-}
-
-.done {
-  text-decoration: line-through;
-  color: var(--text-dim);
-}
-
-.small {
-  font-size: 12px;
-}
-
-.error {
-  color: var(--danger);
-  font-size: 14px;
-  margin-top: 8px;
-}
-
-/* --- Login screen ----------------------------------------------------- */
-
-.login {
-  min-height: 100vh;
-  min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
-.login-card {
-  background: var(--surface);
-  border-radius: var(--radius);
-  padding: 32px 24px;
-  width: 100%;
-  max-width: 380px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  align-items: center;
-}
-
-.login-card h1 {
-  font-size: 32px;
-}
-
-.google-btn-wrap {
-  display: flex;
-  justify-content: center;
-  margin-top: 8px;
-  /* Google's iframe button has its own min height; reserve space so layout
-     doesn't jump when it loads. */
-  min-height: 44px;
-}
-
-.config-warning {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px;
-  text-align: left;
-}
-
-.config-warning code {
-  background: rgba(0, 0, 0, 0.3);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-
-/* --- Signed-in bar ---------------------------------------------------- */
-
-.signed-in-bar {
-  background: var(--surface);
-  border-radius: var(--radius);
-  padding: 12px;
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.data-menu {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-  justify-content: flex-end;
-}
-
-.signed-in-bar .user {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1;
-  min-width: 0;
-}
-
-.signed-in-bar img,
-.signed-in-bar .avatar-fallback {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.signed-in-bar .avatar-fallback {
-  background: var(--accent);
-  color: #001017;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-}
-
-.signed-in-bar .user-text {
-  min-width: 0;
-}
-
-.signed-in-bar .user-name {
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.signed-in-bar .muted {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* --- Buttons (extras) ------------------------------------------------ */
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-button.secondary.danger {
-  color: var(--danger);
-}
-
-/* --- Screen header (back button + title) ----------------------------- */
-
-.screen-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.screen-header h1 {
-  flex: 1;
-  font-size: 22px;
-  /* truncate long program names instead of pushing the back button off */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.screen-header .secondary {
-  flex: 0 0 auto;
-  padding: 8px 12px;
-  min-height: 36px;
-}
-
-/* --- Card header (section title + action button) -------------------- */
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.card-header h2 {
-  margin: 0;
-}
-
-.card-header button {
-  flex: 0 0 auto;
-  padding: 8px 14px;
-  min-height: 36px;
-}
-
-.empty-card {
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: center;
-  padding: 32px 20px;
-}
-
-.empty-card h2 {
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: 18px;
-  color: var(--text);
-  margin-bottom: 0;
-}
-
-.empty-card button {
-  margin-top: 8px;
-  padding-left: 20px;
-  padding-right: 20px;
-}
-
-/* --- Row buttons (program list, etc) -------------------------------- */
-
-.program-list li {
-  /* Let the inner button fill the row entirely. */
-  padding: 0;
-}
-
-.row-button {
-  background: transparent;
-  border: none;
-  color: var(--text);
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  text-align: left;
-  font-weight: 400;
-  border-radius: var(--radius);
-  min-height: 56px;
-}
-
-.row-button:active {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.program-icon {
-  font-size: 22px;
-  flex: 0 0 auto;
-}
-
-.program-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.program-name {
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.chev {
-  color: var(--text-dim);
-  font-size: 22px;
-  flex: 0 0 auto;
-}
-
-/* --- Form fields (label + control) ---------------------------------- */
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.field-label {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-dim);
-  font-weight: 600;
-}
-
-.inline-form {
-  margin-top: 12px;
-  background: var(--surface-2);
-  border-radius: var(--radius);
-  padding: 14px;
-}
-
-.exercise-form {
-  /* Tighter row when the form is inside an inline-form card. */
-  gap: 14px;
-}
-
-/* --- Day-of-week pills ---------------------------------------------- */
-
-.day-pills {
-  display: flex;
-  gap: 8px;
-  /* Equal width across the row, full container width. */
-  width: 100%;
-}
-
-.day-pill {
-  flex: 1 1 0;
-  min-width: 0;
-  height: 44px;
-  padding: 0;
-  background: var(--surface-2);
-  color: var(--text-dim);
-  border: 2px solid var(--border);
-  border-radius: 999px;
-  font-weight: 600;
-  font-size: 15px;
-  cursor: pointer;
-  transition: background-color 80ms, color 80ms, border-color 80ms;
-}
-
-.day-pill:active {
-  transform: scale(0.96);
-}
-
-.day-pill-active {
-  background: var(--accent);
-  color: #001017;
-  border-color: var(--accent);
-}
-
-/* --- Exercise rows in program detail -------------------------------- */
-
-.exercise-row {
-  align-items: flex-start;
-}
-
-.exercise-row-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.last-session {
-  margin-top: 4px;
-  color: var(--accent);
-}
-
-.exercise-row button {
-  flex: 0 0 auto;
-  padding: 8px 16px;
-  min-height: 36px;
-}
-
-.exercise-row-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: stretch;
-}
-
-.exercise-row-actions .secondary,
-.exercise-row-actions .icon {
-  padding: 6px 10px;
-  min-height: 28px;
-  font-size: 13px;
-}
-
-/* When a list <li> hosts the inline ExerciseForm, drop the row chrome so the
-   form fills the slot cleanly. */
-.inline-form-row {
-  display: block !important;
-  background: var(--surface-2);
-  padding: 14px !important;
-}
-
-/* --- Segmented control (Tracking type) ------------------------------- */
-
-.seg-control {
-  display: flex;
-  background: var(--surface-2);
-  border-radius: var(--radius);
-  padding: 4px;
-  gap: 4px;
-}
-
-.seg {
-  flex: 1;
-  background: transparent;
-  color: var(--text-dim);
-  border: none;
-  padding: 8px 12px;
-  font-weight: 600;
-  font-size: 14px;
-  border-radius: 8px;
-  min-height: 36px;
-  transition: background-color 80ms, color 80ms;
-}
-
-.seg-active {
-  background: var(--accent);
-  color: #001017;
-}
-
-/* --- Today banner ---------------------------------------------------- */
-
-.today-box {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  text-align: left;
-  width: 100%;
-  font-weight: 400;
-  font-family: inherit;
-}
-
-.today-box.today-active {
-  /* Looks like a card but behaves like a button. */
-  background: linear-gradient(135deg, #0ea5e9, #38bdf8);
-  color: #001017;
-  border: none;
-  cursor: pointer;
-  padding: 20px;
-  min-height: 96px;
-}
-
-.today-box.today-active:active {
-  transform: scale(0.98);
-}
-
-.today-box.today-rest {
-  background: var(--surface);
-}
-
-.today-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.today-title {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.today-summary {
-  font-size: 15px;
-  font-weight: 600;
-  margin-top: 2px;
-  opacity: 0.85;
-}
-
-.today-preview {
-  margin-top: 6px;
-  /* On the bright banner the .muted color is unreadable — override. */
-  color: rgba(0, 16, 23, 0.65) !important;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.today-chev {
-  font-size: 32px;
-  color: rgba(0, 16, 23, 0.7);
-  flex: 0 0 auto;
-}
-
-.today-rest-icon {
-  font-size: 28px;
-  flex: 0 0 auto;
-}
-
-/* --- Adherence rings ------------------------------------------------- */
-
-.rings-row {
-  display: flex;
-  justify-content: space-around;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.progress-ring {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.progress-ring-label {
-  font-size: 13px;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 600;
-}
-
-/* --- Today screen cards --------------------------------------------- */
-
-.today-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 10px;
-}
-
-.today-card-name {
-  font-size: 17px;
-  margin: 0;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--text);
-}
-
-.today-card-done {
-  /* Subtle visual cue that this exercise is done — left border in accent. */
-  border-left: 3px solid var(--accent);
-}
-
-.today-card-done .check {
-  color: var(--accent);
-  font-weight: 700;
-}
-
-/* --- Set rows on the log-instance form ------------------------------ */
-
-.set-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 8px 0 12px;
-}
-
-.set-row {
-  display: grid;
-  grid-template-columns: 36px 1fr 1fr 36px;
-  align-items: center;
-  gap: 8px;
-}
-
-.set-row-header {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-dim);
-  font-weight: 600;
-}
-
-.set-row-header span {
-  /* The header row uses spans, not inputs — pad them so they line up
-     with the input centers below. */
-  padding-left: 4px;
-}
-
-.set-num {
-  text-align: center;
-  color: var(--text-dim);
-  font-weight: 600;
-}
-
-.set-row input {
-  padding: 10px 12px;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    /* Night-neon palette. Inspired by deep almost-dark cyan night sky with a
+       spark of pink/coral sunset. Foreground is a slightly cool off-white
+       (~92% lightness) — research on dark-mode reading at night recommends
+       avoiding pure white #fff to reduce halation/eye strain. */
+    --background: 215 50% 5%;
+    --foreground: 210 22% 92%;
+
+    --card: 218 38% 8%;
+    --card-foreground: 210 22% 92%;
+
+    --surface-2: 218 28% 13%;
+
+    --popover: 218 38% 8%;
+    --popover-foreground: 210 22% 92%;
+
+    --primary: 186 100% 56%;
+    --primary-foreground: 215 60% 6%;
+
+    --secondary: 218 28% 13%;
+    --secondary-foreground: 210 22% 92%;
+
+    --accent: 342 100% 71%;
+    --accent-foreground: 340 60% 8%;
+
+    --muted: 218 22% 16%;
+    --muted-foreground: 215 16% 65%;
+
+    --destructive: 0 80% 65%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 218 22% 18%;
+    --input: 218 26% 14%;
+    --ring: 186 100% 56%;
+
+    --radius: 14px;
+
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  #root {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 16px 16px 32px;
+  }
+
+  /* Native form-control resets so shadcn classes win cleanly. */
+  input,
+  select,
+  button,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+@layer components {
+  /* Display title — used for "Zenith" wherever the brand appears. The font
+     itself is already an outline; we add a soft cyan glow so it reads as a
+     neon sign on the dark background. */
+  .font-display {
+    font-family: 'Knewave Outline', cursive;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    color: hsl(var(--foreground));
+    text-shadow:
+      0 0 6px hsl(var(--primary) / 0.55),
+      0 0 18px hsl(var(--primary) / 0.35);
+  }
+
+  .font-display-accent {
+    font-family: 'Knewave Outline', cursive;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    color: hsl(var(--foreground));
+    text-shadow:
+      0 0 6px hsl(var(--accent) / 0.55),
+      0 0 18px hsl(var(--accent) / 0.35);
+  }
+}
+
+@layer utilities {
+  .text-glow-primary {
+    text-shadow:
+      0 0 6px hsl(var(--primary) / 0.55),
+      0 0 16px hsl(var(--primary) / 0.3);
+  }
+  .text-glow-accent {
+    text-shadow:
+      0 0 6px hsl(var(--accent) / 0.55),
+      0 0 16px hsl(var(--accent) / 0.3);
+  }
 }

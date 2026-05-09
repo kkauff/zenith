@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react';
+import { Download, Upload } from 'lucide-react';
+import { Button } from './ui/button';
 import * as store from '../storage';
 
 type Props = {
@@ -72,18 +74,30 @@ export function DataMenu({ userId }: Props) {
   };
 
   return (
-    <div className="data-menu">
-      <button className="secondary" onClick={handleExport} disabled={busy}>
+    <div className="mt-2 flex justify-end gap-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={handleExport}
+        disabled={busy}
+      >
+        <Download aria-hidden />
         Export
-      </button>
-      <button className="secondary" onClick={handleImportClick} disabled={busy}>
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={handleImportClick}
+        disabled={busy}
+      >
+        <Upload aria-hidden />
         Import
-      </button>
+      </Button>
       <input
         ref={fileInputRef}
         type="file"
         accept="application/json,.json"
-        style={{ display: 'none' }}
+        className="hidden"
         onChange={handleFileChange}
       />
     </div>

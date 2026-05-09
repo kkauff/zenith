@@ -1,6 +1,9 @@
+import { ArrowLeft } from 'lucide-react';
 import type { Exercise, Instance, Program } from '../types';
 import { formatDuration, formatPlannedSets } from '../templates';
 import { SetEditor } from './SetEditor';
+import { Button } from './ui/button';
+import { Card } from './ui/card';
 
 type Props = {
   program: Program;
@@ -24,17 +27,19 @@ export function LogInstance({ program, exercise, onSave, onCancel }: Props) {
   })();
 
   return (
-    <div className="stack">
-      <header className="screen-header">
-        <button type="button" className="secondary" onClick={onCancel}>
-          ← Cancel
-        </button>
-        <h1>Log session</h1>
+    <div className="space-y-3 mt-3">
+      <header className="flex items-center gap-3">
+        <Button variant="secondary" size="sm" onClick={onCancel}>
+          <ArrowLeft aria-hidden /> Cancel
+        </Button>
+        <h1 className="flex-1 truncate text-xl font-bold tracking-tight m-0">
+          Log session
+        </h1>
       </header>
 
-      <section className="card">
-        <h2>{exercise.name}</h2>
-        <p className="muted small">
+      <Card>
+        <h2 className="text-base font-semibold m-0">{exercise.name}</h2>
+        <p className="text-xs text-muted-foreground m-0">
           {program.name} · target{' '}
           {formatPlannedSets(exercise.plannedSets, exercise.trackingType)}
           {goalSummary}
@@ -52,7 +57,7 @@ export function LogInstance({ program, exercise, onSave, onCancel }: Props) {
             })
           }
         />
-      </section>
+      </Card>
     </div>
   );
 }

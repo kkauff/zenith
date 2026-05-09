@@ -1,8 +1,12 @@
+import path from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  resolve: {
+    alias: { '@': path.resolve(__dirname, './src') },
+  },
   plugins: [
     react(),
     VitePWA({
@@ -12,8 +16,8 @@ export default defineConfig({
         name: 'Zenith',
         short_name: 'Zenith',
         description: 'Lift logging and goal tracking',
-        theme_color: '#0f172a',
-        background_color: '#0f172a',
+        theme_color: '#080d14',
+        background_color: '#080d14',
         display: 'standalone',
         start_url: '/',
         icons: [

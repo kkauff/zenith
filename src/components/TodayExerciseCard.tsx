@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { Check } from 'lucide-react';
 import type { Exercise, Instance, Program } from '../types';
-import {
-  formatDuration,
-  formatPlannedSets,
-} from '../templates';
+import { formatDuration, formatPlannedSets } from '../templates';
 import { SetEditor } from './SetEditor';
+import { Button } from './ui/button';
+import { Card } from './ui/card';
+import { cn } from '@/lib/utils';
 
 type Props = {
   program: Program;
@@ -39,36 +40,39 @@ export function TodayExerciseCard({
   })();
 
   return (
-    <section className={`card today-card ${done ? 'today-card-done' : ''}`}>
-      <div className="today-card-header">
-        <div>
-          <h2 className="today-card-name">
-            {done && <span className="check" aria-hidden>✓ </span>}
-            {exercise.name}
-          </h2>
-          <p className="muted small">
-            {program.name} · target{' '}
-            {formatPlannedSets(exercise.plannedSets, exercise.trackingType)}
-            {goalSummary}
-          </p>
-        </div>
+    <Card
+      className={cn(
+        done &&
+          'border-l-[3px] border-l-primary shadow-glow-primary-sm',
+      )}
+    >
+      <div className="mb-2.5">
+        <h2 className="m-0 inline-flex items-center gap-1.5 text-base font-semibold normal-case tracking-normal text-foreground">
+          {done && <Check aria-hidden className="size-4 text-primary" />}
+          {exercise.name}
+        </h2>
+        <p className="m-0 text-xs text-muted-foreground">
+          {program.name} · target{' '}
+          {formatPlannedSets(exercise.plannedSets, exercise.trackingType)}
+          {goalSummary}
+        </p>
       </div>
 
       {done && !editing && (
-        <>
+        <div className="space-y-2">
           {todaysInstances.map((inst) => (
-            <p key={inst.id} className="muted small">
+            <p key={inst.id} className="text-xs text-muted-foreground m-0">
               Logged: {summarizeSets(inst)}
             </p>
           ))}
-          <button
-            type="button"
-            className="secondary"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => setEditing(true)}
           >
             Log another
-          </button>
-        </>
+          </Button>
+        </div>
       )}
 
       {showEditor && (
@@ -87,7 +91,7 @@ export function TodayExerciseCard({
           }}
         />
       )}
-    </section>
+    </Card>
   );
 }
 

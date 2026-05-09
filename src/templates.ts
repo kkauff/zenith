@@ -5,20 +5,27 @@
 // of the category dropdown. When we add support for them we'll flip the flag
 // and add to EXERCISE_TEMPLATES + extend the Instance data shape (e.g.
 // distance/duration for running).
+import {
+  Dumbbell,
+  Footprints,
+  Salad,
+  Wind,
+  type LucideIcon,
+} from 'lucide-react';
 import type { PlannedSet, RepsTarget, TrackingType } from './types';
 
 export type CategoryTemplate = {
   key: string;
   name: string;
-  icon: string;
+  Icon: LucideIcon;
   available: boolean;
 };
 
 export const CATEGORIES: CategoryTemplate[] = [
-  { key: 'weightlifting', name: 'Weight Lifting', icon: '🏋️', available: true },
-  { key: 'running', name: 'Running', icon: '🏃', available: false },
-  { key: 'nutrition', name: 'Nutrition', icon: '🥗', available: false },
-  { key: 'mindfulness', name: 'Mindfulness', icon: '🧘', available: false },
+  { key: 'weightlifting', name: 'Weight Lifting', Icon: Dumbbell, available: true },
+  { key: 'running', name: 'Running', Icon: Footprints, available: false },
+  { key: 'nutrition', name: 'Nutrition', Icon: Salad, available: false },
+  { key: 'mindfulness', name: 'Mindfulness', Icon: Wind, available: false },
 ];
 
 export function getCategory(key: string): CategoryTemplate | undefined {

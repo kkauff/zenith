@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Plus, X } from 'lucide-react';
 import type { Exercise, PlannedSet, TrackingType } from '../types';
 import {
   EXERCISE_TEMPLATES,
@@ -9,6 +10,10 @@ import {
 } from '../templates';
 import { uid } from '../storage';
 import { SchedulePicker } from './SchedulePicker';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { cn } from '@/lib/utils';
 
 type Props = {
   categoryKey: string;
@@ -194,10 +199,10 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
   };
 
   return (
-    <div className="exercise-form stack">
-      <label className="field">
-        <span className="field-label">Exercise</span>
-        <input
+    <div className="flex flex-col gap-3.5">
+      <label className="flex flex-col gap-1.5">
+        <Label>Exercise</Label>
+        <Input
           list="exercise-templates"
           placeholder="e.g. Squat or Plank"
           value={name}
@@ -211,117 +216,134 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
         </datalist>
       </label>
 
-      <div className="field">
-        <span className="field-label">Tracking</span>
-        <div className="seg-control" role="group" aria-label="Tracking type">
-          <button
-            type="button"
-            className={`seg ${trackingType === 'weight' ? 'seg-active' : ''}`}
-            aria-pressed={trackingType === 'weight'}
-            onClick={() => switchTracking('weight')}
-          >
-            Weight + reps
-          </button>
-          <button
-            type="button"
-            className={`seg ${trackingType === 'time' ? 'seg-active' : ''}`}
-            aria-pressed={trackingType === 'time'}
-            onClick={() => switchTracking('time')}
-          >
-            Time
-          </button>
+      <div className="flex flex-col gap-1.5">
+        <Label>Tracking</Label>
+        <div
+          role="group"
+          aria-label="Tracking type"
+          className="flex gap-1 rounded-lg bg-surface2 p-1"
+        >
+          {(['weight', 'time'] as const).map((t) => {
+            const active = trackingType === t;
+            return (
+              <button
+                key={t}
+                type="button"
+                aria-pressed={active}
+                onClick={() => switchTracking(t)}
+                className={cn(
+                  'flex-1 min-h-9 rounded-md px-3 py-2 text-sm font-semibold transition-colors',
+                  active
+                    ? 'bg-primary text-primary-foreground shadow-glow-primary-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {t === 'weight' ? 'Weight + reps' : 'Time'}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="field">
-        <span className="field-label">Schedule</span>
+      <div className="flex flex-col gap-1.5">
+        <Label>Schedule</Label>
         <SchedulePicker days={days} onChange={setDays} />
       </div>
 
-      <div className="field">
-        <span className="field-label">Sets</span>
-        <div className="set-list">
-          <div className="set-row set-row-header">
-            <span>#</span>
+      <div className="flex flex-col gap-1.5">
+        <Label>Sets</Label>
+        <div className="flex flex-col gap-2">
+          <div
+            className="grid items-center gap-2 text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold"
+            style={{ gridTemplateColumns: '36px 1fr 1fr 36px' }}
+          >
+            <span className="text-center">#</span>
             {trackingType === 'time' ? (
               <>
-                <span>Min</span>
-                <span>Sec</span>
+                <span className="pl-1">Min</span>
+                <span className="pl-1">Sec</span>
               </>
             ) : (
               <>
-                <span>Weight</span>
-                <span>Reps</span>
+                <span className="pl-1">Weight</span>
+                <span className="pl-1">Reps</span>
               </>
             )}
             <span />
           </div>
           {sets.map((s, i) => (
-            <div className="set-row" key={i}>
-              <span className="set-num">{i + 1}</span>
+            <div
+              key={i}
+              className="grid items-center gap-2"
+              style={{ gridTemplateColumns: '36px 1fr 1fr 36px' }}
+            >
+              <span className="text-center text-muted-foreground font-semibold">
+                {i + 1}
+              </span>
               {trackingType === 'time' ? (
                 <>
-                  <input
+                  <Input
                     inputMode="numeric"
                     placeholder="0"
                     value={s.min}
                     onChange={(e) => updateSet(i, { min: e.target.value })}
+                    className="h-10 px-3 py-2"
                   />
-                  <input
+                  <Input
                     inputMode="numeric"
                     placeholder="30"
                     value={s.sec}
                     onChange={(e) => updateSet(i, { sec: e.target.value })}
+                    className="h-10 px-3 py-2"
                   />
                 </>
               ) : (
                 <>
-                  <input
-                    inputMode="text"
+                  <Input
                     placeholder="lb"
                     value={s.weight}
                     onChange={(e) => updateSet(i, { weight: e.target.value })}
+                    className="h-10 px-3 py-2"
                   />
-                  <input
-                    inputMode="text"
+                  <Input
                     placeholder="5 or 8-10"
                     value={s.reps}
                     onChange={(e) => updateSet(i, { reps: e.target.value })}
+                    className="h-10 px-3 py-2"
                   />
                 </>
               )}
-              <button
-                type="button"
-                className="icon"
+              <Button
+                variant="ghost"
+                size="iconSm"
                 aria-label={`Remove set ${i + 1}`}
                 onClick={() => removeSet(i)}
                 disabled={sets.length <= 1}
               >
-                ✕
-              </button>
+                <X aria-hidden />
+              </Button>
             </div>
           ))}
         </div>
-        <button type="button" className="secondary" onClick={addSet}>
-          + Add set
-        </button>
+        <Button variant="secondary" size="sm" onClick={addSet}>
+          <Plus aria-hidden /> Add set
+        </Button>
       </div>
 
       {trackingType === 'weight' ? (
-        <label className="field">
-          <span className="field-label">Goal weight (lb, optional)</span>
-          <input
-            inputMode="text"
+        <label className="flex flex-col gap-1.5">
+          <Label>Goal weight (lb, optional)</Label>
+          <Input
             placeholder="—"
             value={goalWeight}
             onChange={(e) => setGoalWeight(e.target.value)}
           />
         </label>
       ) : (
-        <div className="field">
-          <span className="field-label">Goal duration (optional)</span>
-          <div className="row">
-            <input
+        <div className="flex flex-col gap-1.5">
+          <Label>Goal duration (optional)</Label>
+          <div className="flex gap-2">
+            <Input
               inputMode="numeric"
               placeholder="min"
               value={goalDuration.min}
@@ -329,7 +351,7 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
                 setGoalDuration({ ...goalDuration, min: e.target.value })
               }
             />
-            <input
+            <Input
               inputMode="numeric"
               placeholder="sec"
               value={goalDuration.sec}
@@ -341,15 +363,15 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
         </div>
       )}
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="text-sm text-destructive m-0">{error}</p>}
 
-      <div className="row">
-        <button type="button" className="secondary" onClick={onCancel}>
+      <div className="flex gap-2">
+        <Button variant="secondary" onClick={onCancel} className="flex-1">
           Cancel
-        </button>
-        <button type="button" onClick={submit}>
+        </Button>
+        <Button onClick={submit} className="flex-1">
           {initial ? 'Save' : 'Add exercise'}
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ArrowLeft, Pencil, Plus, Trash2, X } from 'lucide-react';
 import type { Exercise, Instance, Program } from '../types';
 import {
   formatDuration,
@@ -7,6 +8,9 @@ import {
   getCategory,
 } from '../templates';
 import { ExerciseForm } from './ExerciseForm';
+import { Button } from './ui/button';
+import { Card, CardHeader, CardTitle } from './ui/card';
+import { Input } from './ui/input';
 
 type Props = {
   program: Program;
@@ -26,6 +30,7 @@ export function ProgramDetail({
   onDelete,
 }: Props) {
   const category = getCategory(program.categoryKey);
+  const CategoryIcon = category?.Icon;
 
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState(program.name);
@@ -74,13 +79,13 @@ export function ProgramDetail({
   };
 
   return (
-    <>
-      <header className="screen-header">
-        <button type="button" className="secondary" onClick={onBack}>
-          ← Back
-        </button>
+    <div className="space-y-3 mt-3">
+      <header className="flex items-center gap-3">
+        <Button variant="secondary" size="sm" onClick={onBack}>
+          <ArrowLeft aria-hidden /> Back
+        </Button>
         {editingName ? (
-          <input
+          <Input
             autoFocus
             value={draftName}
             onChange={(e) => setDraftName(e.target.value)}
@@ -91,33 +96,35 @@ export function ProgramDetail({
             aria-label="Program name"
           />
         ) : (
-          <h1>{program.name}</h1>
+          <h1 className="flex-1 truncate text-xl font-bold tracking-tight m-0">
+            {program.name}
+          </h1>
         )}
         {editingName ? (
           <>
-            <button type="button" onClick={saveName}>
+            <Button size="sm" onClick={saveName}>
               Save
-            </button>
-            <button type="button" className="secondary" onClick={cancelRename}>
+            </Button>
+            <Button variant="secondary" size="sm" onClick={cancelRename}>
               Cancel
-            </button>
+            </Button>
           </>
         ) : (
           <>
-            <button
-              type="button"
-              className="secondary"
+            <Button
+              variant="secondary"
+              size="iconSm"
               onClick={() => {
                 setDraftName(program.name);
                 setEditingName(true);
               }}
               aria-label="Rename program"
             >
-              ✎
-            </button>
-            <button
-              type="button"
-              className="secondary danger"
+              <Pencil aria-hidden />
+            </Button>
+            <Button
+              variant="destructive"
+              size="iconSm"
               onClick={() => {
                 if (confirm(`Delete "${program.name}" and all its history?`)) {
                   onDelete();
@@ -125,36 +132,39 @@ export function ProgramDetail({
               }}
               aria-label="Delete program"
             >
-              ✕
-            </button>
+              <Trash2 aria-hidden />
+            </Button>
           </>
         )}
       </header>
 
-      <p className="muted">
-        {category?.icon} {category?.name ?? program.categoryKey}
+      <p className="m-0 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+        {CategoryIcon && <CategoryIcon aria-hidden className="size-4" />}
+        {category?.name ?? program.categoryKey}
       </p>
 
-      <section className="card">
-        <div className="card-header">
-          <h2>Exercises</h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>Exercises</CardTitle>
           {!addingExercise && editingExerciseId === null && (
-            <button type="button" onClick={() => setAddingExercise(true)}>
-              + Add
-            </button>
+            <Button size="sm" onClick={() => setAddingExercise(true)}>
+              <Plus aria-hidden /> Add
+            </Button>
           )}
-        </div>
+        </CardHeader>
 
         {program.exercises.length === 0 && !addingExercise && (
-          <p className="empty">No exercises yet. Tap “+ Add” to start.</p>
+          <p className="italic text-sm text-muted-foreground py-2 m-0">
+            No exercises yet. Tap “Add” to start.
+          </p>
         )}
 
         {program.exercises.length > 0 && (
-          <ul className="list">
+          <ul className="flex flex-col gap-2 list-none m-0 p-0">
             {program.exercises.map((ex) => {
               if (editingExerciseId === ex.id) {
                 return (
-                  <li key={ex.id} className="inline-form-row">
+                  <li key={ex.id} className="rounded-lg bg-surface2 p-3.5">
                     <ExerciseForm
                       categoryKey={program.categoryKey}
                       initial={ex}
@@ -172,41 +182,46 @@ export function ProgramDetail({
                     ? ` · goal ${ex.goalWeight} lb`
                     : '';
               return (
-                <li key={ex.id} className="exercise-row">
-                  <div className="exercise-row-main">
+                <li
+                  key={ex.id}
+                  className="flex items-start gap-2 rounded-lg bg-surface2 p-3.5"
+                >
+                  <div className="flex-1 min-w-0">
                     <div>
-                      <strong>{ex.name}</strong>
+                      <strong className="font-semibold">{ex.name}</strong>
                     </div>
-                    <div className="muted small">
+                    <div className="text-xs text-muted-foreground">
                       {formatSchedule(ex.schedule.days)} ·{' '}
                       {formatPlannedSets(ex.plannedSets, ex.trackingType)}
                       {goal}
                     </div>
                     {last && (
-                      <div className="muted small last-session">
+                      <div className="mt-1 text-xs text-primary text-glow-primary">
                         Last: {summarizeSets(last)} ·{' '}
                         {new Date(last.loggedAt).toLocaleDateString()}
                       </div>
                     )}
                   </div>
-                  <div className="exercise-row-actions">
-                    <button onClick={() => onLog(ex.id)}>Log</button>
-                    <button
-                      type="button"
-                      className="secondary"
+                  <div className="flex flex-col gap-1.5">
+                    <Button size="sm" onClick={() => onLog(ex.id)}>
+                      Log
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="iconSm"
                       onClick={() => setEditingExerciseId(ex.id)}
                       aria-label={`Edit ${ex.name}`}
                     >
-                      ✎
-                    </button>
-                    <button
-                      type="button"
-                      className="icon"
+                      <Pencil aria-hidden />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="iconSm"
                       onClick={() => removeExercise(ex.id)}
                       aria-label={`Remove ${ex.name}`}
                     >
-                      ✕
-                    </button>
+                      <X aria-hidden />
+                    </Button>
                   </div>
                 </li>
               );
@@ -215,7 +230,7 @@ export function ProgramDetail({
         )}
 
         {addingExercise && (
-          <div className="inline-form">
+          <div className="mt-3 rounded-lg bg-surface2 p-3.5">
             <ExerciseForm
               categoryKey={program.categoryKey}
               onSave={addExercise}
@@ -223,37 +238,44 @@ export function ProgramDetail({
             />
           </div>
         )}
-      </section>
+      </Card>
 
-      <section className="card">
-        <h2>Recent sessions</h2>
+      <Card>
+        <CardTitle className="mb-2">Recent sessions</CardTitle>
         {instances.length === 0 ? (
-          <p className="empty">No sessions logged yet.</p>
+          <p className="italic text-sm text-muted-foreground py-2 m-0">
+            No sessions logged yet.
+          </p>
         ) : (
-          <ul className="list">
+          <ul className="flex flex-col gap-2 list-none m-0 p-0">
             {instances.slice(0, 20).map((inst) => {
               const ex = program.exercises.find((e) => e.id === inst.exerciseId);
               return (
-                <li key={inst.id}>
+                <li
+                  key={inst.id}
+                  className="rounded-lg bg-surface2 p-3.5"
+                >
                   <div>
-                    <div>
-                      <strong>{ex?.name ?? 'Removed exercise'}</strong>
-                    </div>
-                    <div className="muted small">
-                      {summarizeSets(inst)} ·{' '}
-                      {new Date(inst.loggedAt).toLocaleDateString()}
-                    </div>
-                    {inst.notes && (
-                      <div className="muted small">“{inst.notes}”</div>
-                    )}
+                    <strong className="font-semibold">
+                      {ex?.name ?? 'Removed exercise'}
+                    </strong>
                   </div>
+                  <div className="text-xs text-muted-foreground">
+                    {summarizeSets(inst)} ·{' '}
+                    {new Date(inst.loggedAt).toLocaleDateString()}
+                  </div>
+                  {inst.notes && (
+                    <div className="text-xs text-muted-foreground italic">
+                      “{inst.notes}”
+                    </div>
+                  )}
                 </li>
               );
             })}
           </ul>
         )}
-      </section>
-    </>
+      </Card>
+    </div>
   );
 }
 
