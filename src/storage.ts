@@ -148,6 +148,13 @@ export async function addInstance(
   return instance;
 }
 
+export async function updateInstance(
+  userId: string,
+  instance: Instance,
+): Promise<void> {
+  await setDoc(doc(instancesCol(userId), instance.id), stripUndefined(instance));
+}
+
 export async function deleteInstance(userId: string, id: string): Promise<void> {
   await deleteDoc(doc(instancesCol(userId), id));
 }
@@ -182,6 +189,31 @@ export async function exportData(userId: string): Promise<ExportFile> {
     exportedAt: new Date().toISOString(),
     programs: progSnap.docs.map((d) => d.data() as Program),
     instances: instSnap.docs.map((d) => d.data() as Instance),
+  };
+}
+
+// Export a single program plus its instances. Same on-disk shape as
+// exportData, so the standard import flow handles re-loading it.
+export async function exportProgram(
+  userId: string,
+  programId: string,
+): Promise<ExportFile> {
+  const [progSnap, instSnap] = await Promise.all([
+    getDocs(programsCol(userId)),
+    getDocs(instancesCol(userId)),
+  ]);
+  const program = progSnap.docs
+    .map((d) => d.data() as Program)
+    .find((p) => p.id === programId);
+  const instances = instSnap.docs
+    .map((d) => d.data() as Instance)
+    .filter((i) => i.programId === programId);
+  return {
+    format: 'zenith',
+    version: EXPORT_VERSION,
+    exportedAt: new Date().toISOString(),
+    programs: program ? [program] : [],
+    instances,
   };
 }
 

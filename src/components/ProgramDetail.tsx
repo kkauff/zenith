@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Download, Pencil, Plus, Trash2, X } from 'lucide-react';
 import type { Exercise, Instance, Program } from '../types';
 import {
   formatDuration,
@@ -7,28 +7,71 @@ import {
   formatSchedule,
   getCategory,
 } from '../templates';
+import * as store from '../storage';
 import { ExerciseForm } from './ExerciseForm';
+import { SetEditor } from './SetEditor';
 import { Button } from './ui/button';
 import { Card, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 
 type Props = {
+  userId: string;
   program: Program;
   instances: Instance[];
   onBack: () => void;
   onLog: (exerciseId: string) => void;
   onUpdate: (program: Program) => void;
   onDelete: () => void;
+  onUpdateInstance: (instance: Instance) => void;
+  onDeleteInstance: (id: string) => void;
 };
 
+function safeFilename(name: string): string {
+  return name.replace(/[^a-z0-9-_]+/gi, '-').replace(/^-+|-+$/g, '') || 'program';
+}
+
+function todayStamp(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function ProgramDetail({
+  userId,
   program,
   instances,
   onBack,
   onLog,
   onUpdate,
   onDelete,
+  onUpdateInstance,
+  onDeleteInstance,
 }: Props) {
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const data = await store.exportProgram(userId, program.id);
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `zenith-${safeFilename(program.name)}-${todayStamp()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(
+        `Export failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const category = getCategory(program.categoryKey);
   const CategoryIcon = category?.Icon;
 
@@ -36,6 +79,7 @@ export function ProgramDetail({
   const [draftName, setDraftName] = useState(program.name);
   const [addingExercise, setAddingExercise] = useState(false);
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
+  const [editingInstanceId, setEditingInstanceId] = useState<string | null>(null);
 
   // Group recent instances by exercise so each row shows its latest session.
   const lastByExercise = new Map<string, Instance>();
@@ -111,6 +155,15 @@ export function ProgramDetail({
           </>
         ) : (
           <>
+            <Button
+              variant="secondary"
+              size="iconSm"
+              onClick={handleExport}
+              disabled={exporting}
+              aria-label="Export program"
+            >
+              <Download aria-hidden />
+            </Button>
             <Button
               variant="secondary"
               size="iconSm"
@@ -250,25 +303,76 @@ export function ProgramDetail({
           <ul className="flex flex-col gap-2 list-none m-0 p-0">
             {instances.slice(0, 20).map((inst) => {
               const ex = program.exercises.find((e) => e.id === inst.exerciseId);
+              if (editingInstanceId === inst.id && ex) {
+                return (
+                  <li key={inst.id} className="rounded-lg bg-surface2 p-3.5">
+                    <div className="mb-2 text-xs text-muted-foreground">
+                      Edit session ·{' '}
+                      <strong className="font-semibold text-foreground">
+                        {ex.name}
+                      </strong>{' '}
+                      · {new Date(inst.loggedAt).toLocaleDateString()}
+                    </div>
+                    <SetEditor
+                      exercise={ex}
+                      initial={inst}
+                      saveLabel="Save changes"
+                      onCancel={() => setEditingInstanceId(null)}
+                      onLog={(sets, notes) => {
+                        onUpdateInstance({
+                          ...inst,
+                          sets,
+                          notes: notes.trim() || undefined,
+                        });
+                        setEditingInstanceId(null);
+                      }}
+                    />
+                  </li>
+                );
+              }
               return (
                 <li
                   key={inst.id}
-                  className="rounded-lg bg-surface2 p-3.5"
+                  className="flex items-start gap-2 rounded-lg bg-surface2 p-3.5"
                 >
-                  <div>
-                    <strong className="font-semibold">
-                      {ex?.name ?? 'Removed exercise'}
-                    </strong>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {summarizeSets(inst)} ·{' '}
-                    {new Date(inst.loggedAt).toLocaleDateString()}
-                  </div>
-                  {inst.notes && (
-                    <div className="text-xs text-muted-foreground italic">
-                      “{inst.notes}”
+                  <div className="flex-1 min-w-0">
+                    <div>
+                      <strong className="font-semibold">
+                        {ex?.name ?? 'Removed exercise'}
+                      </strong>
                     </div>
+                    <div className="text-xs text-muted-foreground">
+                      {summarizeSets(inst)} ·{' '}
+                      {new Date(inst.loggedAt).toLocaleDateString()}
+                    </div>
+                    {inst.notes && (
+                      <div className="text-xs text-muted-foreground italic">
+                        “{inst.notes}”
+                      </div>
+                    )}
+                  </div>
+                  {ex && (
+                    <Button
+                      variant="secondary"
+                      size="iconSm"
+                      aria-label="Edit session"
+                      onClick={() => setEditingInstanceId(inst.id)}
+                    >
+                      <Pencil aria-hidden />
+                    </Button>
                   )}
+                  <Button
+                    variant="ghost"
+                    size="iconSm"
+                    aria-label="Delete session"
+                    onClick={() => {
+                      if (confirm('Delete this logged session?')) {
+                        onDeleteInstance(inst.id);
+                      }
+                    }}
+                  >
+                    <Trash2 aria-hidden />
+                  </Button>
                 </li>
               );
             })}

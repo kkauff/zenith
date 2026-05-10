@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
-import type { Exercise, InstanceSet } from '../types';
+import type { Exercise, Instance, InstanceSet } from '../types';
 import { parseDuration, splitDuration } from '../templates';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -14,11 +14,15 @@ type Props = {
   // Skipped on the inline today cards where we don't need a notes field —
   // the screen-style LogInstance keeps it.
   showNotes?: boolean;
+  // When provided, prefills the editor with this instance's sets/notes
+  // (i.e. "edit mode"). Otherwise we seed from the exercise's plannedSets.
+  initial?: Instance;
+  onCancel?: () => void;
 };
 
 type DraftSet = { weight: string; reps: string; min: string; sec: string };
 
-function makeInitialSets(exercise: Exercise): DraftSet[] {
+function makeDraftFromPlanned(exercise: Exercise): DraftSet[] {
   if (exercise.plannedSets.length === 0) {
     return [{ weight: '', reps: '', min: '', sec: '' }];
   }
@@ -37,14 +41,40 @@ function makeInitialSets(exercise: Exercise): DraftSet[] {
   });
 }
 
+function makeDraftFromInstance(
+  exercise: Exercise,
+  inst: Instance,
+): DraftSet[] {
+  if (inst.sets.length === 0) return makeDraftFromPlanned(exercise);
+  return inst.sets.map((s): DraftSet => {
+    if (exercise.trackingType === 'time') {
+      const d = s.durationSeconds ?? 0;
+      const { min, sec } = splitDuration(d);
+      return { weight: '', reps: '', min: String(min), sec: String(sec) };
+    }
+    return {
+      weight: s.weight !== undefined ? String(s.weight) : '',
+      reps: s.reps !== undefined ? String(s.reps) : '',
+      min: '',
+      sec: '',
+    };
+  });
+}
+
 export function SetEditor({
   exercise,
   onLog,
   saveLabel = 'Save session',
   showNotes = true,
+  initial,
+  onCancel,
 }: Props) {
-  const [sets, setSets] = useState<DraftSet[]>(makeInitialSets(exercise));
-  const [notes, setNotes] = useState('');
+  const [sets, setSets] = useState<DraftSet[]>(
+    initial
+      ? makeDraftFromInstance(exercise, initial)
+      : makeDraftFromPlanned(exercise),
+  );
+  const [notes, setNotes] = useState(initial?.notes ?? '');
 
   const isTime = exercise.trackingType === 'time';
 
@@ -174,9 +204,16 @@ export function SetEditor({
         />
       )}
 
-      <Button onClick={submit} className="mt-3 w-full">
-        {saveLabel}
-      </Button>
+      <div className="mt-3 flex gap-2">
+        {onCancel && (
+          <Button variant="secondary" onClick={onCancel} className="flex-1">
+            Cancel
+          </Button>
+        )}
+        <Button onClick={submit} className="flex-1">
+          {saveLabel}
+        </Button>
+      </div>
     </>
   );
 }

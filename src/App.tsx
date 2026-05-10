@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
+import { AppHeader, type NavView } from './components/AppHeader';
 import { Login } from './components/Login';
-import { SignedInBar } from './components/SignedInBar';
-import { DataMenu } from './components/DataMenu';
 import { Home } from './components/Home';
 import { NewProgram } from './components/NewProgram';
 import { ProgramDetail } from './components/ProgramDetail';
+import { ProgramsScreen } from './components/ProgramsScreen';
+import { ProgressScreen } from './components/ProgressScreen';
 import { LogInstance } from './components/LogInstance';
-import { TodayScreen } from './components/TodayScreen';
-import { Brand } from './components/ui/brand';
 import { Button } from './components/ui/button';
 import { Card } from './components/ui/card';
 import * as auth from './auth';
@@ -17,7 +16,8 @@ import type { Instance, Program } from './types';
 
 type View =
   | { kind: 'home' }
-  | { kind: 'today' }
+  | { kind: 'programs' }
+  | { kind: 'progress' }
   | { kind: 'newProgram' }
   | { kind: 'program'; programId: string }
   | { kind: 'logInstance'; programId: string; exerciseId: string };
@@ -32,6 +32,23 @@ function NotFound({ onHome }: { onHome: () => void }) {
       <Button onClick={onHome}>Back to home</Button>
     </Card>
   );
+}
+
+// Map our internal view type onto the three nav-menu destinations so the
+// header can highlight the active one. Sub-screens (program detail, log,
+// new program) bucket under 'programs' since they're not menu destinations.
+function navFor(view: View): NavView {
+  switch (view.kind) {
+    case 'programs':
+    case 'newProgram':
+    case 'program':
+    case 'logInstance':
+      return 'programs';
+    case 'progress':
+      return 'progress';
+    default:
+      return 'home';
+  }
 }
 
 export default function App() {
@@ -50,7 +67,7 @@ export default function App() {
     });
   }, []);
 
-  // While signed in, keep state synced with Firestore via onSnapshot. Both
+  // While signed in, keep state synced with Firestore via onSnapshot. All
   // listeners auto-fire on remote changes too — so logging on phone updates
   // laptop and vice-versa.
   useEffect(() => {
@@ -86,14 +103,22 @@ export default function App() {
   const deleteProgram = async (programId: string) => {
     if (!user) return;
     await store.deleteProgram(user.sub, programId);
-    setView({ kind: 'home' });
+    setView({ kind: 'programs' });
   };
 
-  // Records an instance — does NOT navigate. Today screen and inline logging
-  // stay put; screens that should navigate after logging do it themselves.
   const addInstance = async (fields: Omit<Instance, 'id' | 'loggedAt'>) => {
     if (!user) return;
     await store.addInstance(user.sub, fields);
+  };
+
+  const updateInstance = async (instance: Instance) => {
+    if (!user) return;
+    await store.updateInstance(user.sub, instance);
+  };
+
+  const deleteInstance = async (id: string) => {
+    if (!user) return;
+    await store.deleteInstance(user.sub, id);
   };
 
   if (!authReady) return null;
@@ -102,6 +127,12 @@ export default function App() {
   const goHome = () => setView({ kind: 'home' });
   const today = new Date();
 
+  const navigate = (nav: NavView) => {
+    if (nav === 'home') setView({ kind: 'home' });
+    else if (nav === 'programs') setView({ kind: 'programs' });
+    else setView({ kind: 'progress' });
+  };
+
   let body: React.ReactNode;
   if (view.kind === 'home') {
     body = (
@@ -109,23 +140,39 @@ export default function App() {
         programs={programs}
         instances={instances}
         today={today}
-        onOpen={(programId) => setView({ kind: 'program', programId })}
+        userName={user.name}
         onNew={() => setView({ kind: 'newProgram' })}
-        onOpenToday={() => setView({ kind: 'today' })}
+        onLogInstance={addInstance}
+        onUpdateInstance={updateInstance}
+        onDeleteInstance={deleteInstance}
       />
     );
-  } else if (view.kind === 'today') {
+  } else if (view.kind === 'programs') {
     body = (
-      <TodayScreen
+      <ProgramsScreen
+        userId={user.sub}
+        programs={programs}
+        onBack={goHome}
+        onOpen={(programId) => setView({ kind: 'program', programId })}
+        onNew={() => setView({ kind: 'newProgram' })}
+      />
+    );
+  } else if (view.kind === 'progress') {
+    body = (
+      <ProgressScreen
         programs={programs}
         instances={instances}
         today={today}
         onBack={goHome}
-        onLog={addInstance}
       />
     );
   } else if (view.kind === 'newProgram') {
-    body = <NewProgram onCreate={createProgram} onCancel={goHome} />;
+    body = (
+      <NewProgram
+        onCreate={createProgram}
+        onCancel={() => setView({ kind: 'programs' })}
+      />
+    );
   } else if (view.kind === 'program') {
     const program = programs.find((p) => p.id === view.programId);
     if (!program) {
@@ -134,14 +181,17 @@ export default function App() {
       const programInstances = instances.filter((i) => i.programId === program.id);
       body = (
         <ProgramDetail
+          userId={user.sub}
           program={program}
           instances={programInstances}
-          onBack={goHome}
+          onBack={() => setView({ kind: 'programs' })}
           onLog={(exerciseId) =>
             setView({ kind: 'logInstance', programId: program.id, exerciseId })
           }
           onUpdate={updateProgram}
           onDelete={() => deleteProgram(program.id)}
+          onUpdateInstance={updateInstance}
+          onDeleteInstance={deleteInstance}
         />
       );
     }
@@ -169,18 +219,12 @@ export default function App() {
 
   return (
     <main>
-      <header className="flex items-center justify-between gap-3 pt-1">
-        <button
-          type="button"
-          onClick={goHome}
-          aria-label="Home"
-          className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-        >
-          <Brand as="h1" className="text-3xl leading-none m-0" />
-        </button>
-      </header>
-      <SignedInBar user={user} onSignOut={signOut} />
-      <DataMenu userId={user.sub} />
+      <AppHeader
+        user={user}
+        current={navFor(view)}
+        onNavigate={navigate}
+        onSignOut={signOut}
+      />
       {body}
     </main>
   );

@@ -1,94 +1,86 @@
-import { ChevronRight, FileText, Plus } from 'lucide-react';
+import { useState } from 'react';
+import { Plus } from 'lucide-react';
 import type { Instance, Program } from '../types';
-import { getCategory } from '../templates';
-import { AdherenceRings } from './AdherenceRings';
+import { exercisesForDay, greetingFor, instancesOnDay } from '../today';
 import { TodayBox } from './TodayBox';
+import { TodayExerciseCard } from './TodayExerciseCard';
 import { Button } from './ui/button';
-import { Card, CardHeader, CardTitle } from './ui/card';
+import { Card } from './ui/card';
 
 type Props = {
   programs: Program[];
   instances: Instance[];
   today: Date;
-  onOpen: (programId: string) => void;
+  userName: string;
   onNew: () => void;
-  onOpenToday: () => void;
+  onLogInstance: (fields: Omit<Instance, 'id' | 'loggedAt'>) => void;
+  onUpdateInstance: (instance: Instance) => void;
+  onDeleteInstance: (id: string) => void;
 };
 
 export function Home({
   programs,
   instances,
   today,
-  onOpen,
+  userName,
   onNew,
-  onOpenToday,
+  onLogInstance,
+  onUpdateInstance,
+  onDeleteInstance,
 }: Props) {
-  // First-time empty state — no programs yet, so no schedule and no adherence
-  // to compute. Skip the today/adherence cards entirely.
+  const [expanded, setExpanded] = useState(false);
+
+  const greeting = greetingFor(today, userName);
+
+  // First-time empty state — still show the greeting; just point at program
+  // creation instead of the today panel.
   if (programs.length === 0) {
     return (
-      <Card className="mt-4 text-center flex flex-col items-center gap-3 py-8">
-        <h2 className="text-base font-semibold m-0">No programs yet</h2>
-        <p className="text-sm text-muted-foreground m-0">
-          Create a program to start tracking exercises and logging sessions.
-        </p>
-        <Button onClick={onNew}>
-          <Plus aria-hidden /> New program
-        </Button>
-      </Card>
+      <div className="space-y-4 mt-4">
+        <h2 className="text-2xl font-bold tracking-tight m-0">{greeting}!</h2>
+        <Card className="text-center flex flex-col items-center gap-3 py-8">
+          <h2 className="text-base font-semibold m-0">No programs yet</h2>
+          <p className="text-sm text-muted-foreground m-0">
+            Create a program to start tracking exercises and logging sessions.
+          </p>
+          <Button onClick={onNew}>
+            <Plus aria-hidden /> New program
+          </Button>
+        </Card>
+      </div>
     );
   }
 
+  const scheduled = exercisesForDay(programs, today);
+  const todays = instancesOnDay(instances, today);
+
   return (
     <div className="space-y-4 mt-4">
+      <h2 className="text-2xl font-bold tracking-tight m-0">{greeting}!</h2>
       <TodayBox
         programs={programs}
         instances={instances}
         today={today}
-        onOpen={onOpenToday}
+        expanded={expanded}
+        onToggle={() => setExpanded((v) => !v)}
       />
-
-      <AdherenceRings programs={programs} instances={instances} today={today} />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Your programs</CardTitle>
-          <Button size="sm" onClick={onNew}>
-            <Plus aria-hidden /> New
-          </Button>
-        </CardHeader>
-        <ul className="flex flex-col gap-2 list-none m-0 p-0">
-          {programs.map((p) => {
-            const cat = getCategory(p.categoryKey);
-            const Icon = cat?.Icon ?? FileText;
-            return (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  onClick={() => onOpen(p.id)}
-                  aria-label={`Open ${p.name}`}
-                  className="w-full min-h-14 flex items-center gap-3 rounded-lg bg-surface2 px-3.5 py-3 text-left transition-colors hover:border-primary/40 border border-transparent active:bg-surface2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                >
-                  <span className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-                    <Icon aria-hidden className="size-5" />
-                  </span>
-                  <span className="flex-1 min-w-0 flex flex-col gap-0.5">
-                    <span className="truncate font-semibold">{p.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {cat?.name ?? p.categoryKey} · {p.exercises.length}{' '}
-                      exercise{p.exercises.length === 1 ? '' : 's'}
-                    </span>
-                  </span>
-                  <ChevronRight
-                    aria-hidden
-                    className="size-5 text-muted-foreground flex-shrink-0"
-                  />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </Card>
+      {expanded && scheduled.length > 0 && (
+        <div className="space-y-3">
+          {scheduled.map(({ program, exercise }) => (
+            <TodayExerciseCard
+              key={exercise.id}
+              program={program}
+              exercise={exercise}
+              todaysInstances={todays.filter(
+                (i) => i.exerciseId === exercise.id,
+              )}
+              onLog={onLogInstance}
+              onUpdate={onUpdateInstance}
+              onDelete={onDeleteInstance}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

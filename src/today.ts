@@ -44,6 +44,20 @@ export function dayName(date: Date): string {
   return date.toLocaleDateString(undefined, { weekday: 'long' });
 }
 
+// Time-of-day greeting + first name. Reads `getHours()` so it picks up the
+// user's local timezone automatically. Falls back to no name when the auth
+// profile doesn't expose one.
+export function greetingFor(date: Date, fullName: string): string {
+  const first = fullName.trim().split(/\s+/)[0] ?? '';
+  const h = date.getHours();
+  let prefix: string;
+  if (h < 6) prefix = `Happy ${dayName(date)}`;
+  else if (h < 12) prefix = 'Good morning';
+  else if (h < 18) prefix = 'Good afternoon';
+  else prefix = 'Good evening';
+  return first ? `${prefix}, ${first}` : prefix;
+}
+
 // All exercises across all programs that are scheduled for the given day.
 export function exercisesForDay(
   programs: Program[],
