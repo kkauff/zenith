@@ -70,6 +70,34 @@ the allowlist in the
 [Firebase Auth users console](https://console.firebase.google.com/project/zenith-88099/authentication/users)
 and you'll be able to sign in from the live URL above.
 
+### Data & privacy
+
+Zenith stores **only** what you explicitly enter into it. There is no
+analytics, no tracking pixels, no third-party telemetry.
+
+- **What's collected:** the Google account info Firebase Authentication
+  exposes (display name, email, profile picture URL, Google UID), plus
+  the workout data you create — programs, exercises, logged sessions,
+  rest days.
+- **Where it lives:** in [Cloud Firestore](https://firebase.google.com/products/firestore)
+  under a Firebase project I (the maintainer) operate. Data is scoped
+  per-user via Firestore security rules — your records are only
+  readable/writable by your own signed-in session.
+- **Who can see it:** I can see allowlisted users in the Firebase Auth
+  console (names + emails) and, as the project owner, I have technical
+  read access to the underlying Firestore documents. I don't routinely
+  look at them, but you should know it's possible.
+- **Export / delete:** every account can export the full dataset as
+  JSON from the in-app data menu at any time. To delete your account
+  and all associated Firestore data, reach out via my GitHub profile
+  ([@kkauff](https://github.com/kkauff)) and I'll remove both the
+  allowlist entry and the data.
+
+If you're not comfortable with the above, the project is MIT-licensed
+and self-hostable — see the
+[Firebase setup](#firebase-setup-one-time) section to run your own
+Firebase project so the data lives entirely under your control.
+
 ### Installing it on your phone (PWA)
 
 Once you can sign in, install Zenith to your home screen so it
@@ -369,3 +397,32 @@ public/
 scripts/
   gen-icons.mjs        regenerates the icons above
 ```
+
+---
+
+## Contributing
+
+Issues and PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for
+the (light) process. For security issues, please follow
+[SECURITY.md](SECURITY.md) instead of filing a public issue.
+
+---
+
+## Credits
+
+- **Knewave Outline** display font by Tyler Finck — distributed via
+  [The League of Moveable Type](https://www.theleagueofmoveabletype.com/knewave)
+  under the [SIL Open Font License 1.1](public/fonts/OFL.txt).
+  The font file is bundled in `public/fonts/` alongside its OFL.
+- Icons from [Lucide](https://lucide.dev) (ISC license).
+- UI primitives adapted from [shadcn/ui](https://ui.shadcn.com) (MIT).
+
+---
+
+## License
+
+Zenith is licensed under the **MIT License**. See [LICENSE](LICENSE)
+for the full text.
+
+Third-party assets bundled in this repository retain their own
+licenses — see [Credits](#credits).

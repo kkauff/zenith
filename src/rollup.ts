@@ -8,10 +8,13 @@ import { formatDistance, formatSchedule } from './templates';
 // "Cardio (Any) · 6h per week" / "Running · 5 mi per week" /
 // "Cardio (Any) · 30 min per scheduled day".
 export function summarizeRollup(goal: RollupGoal, program: Program): string {
+  // Bind to a local const so the discriminated-union narrowing survives the
+  // arrow-fn boundary inside .find() under `tsc -b`'s stricter inference.
+  const target = goal.target;
   const label =
-    goal.target.kind === 'exercise'
-      ? (program.exercises.find((e) => e.id === goal.target.exerciseId)
-          ?.name ?? 'Removed exercise')
+    target.kind === 'exercise'
+      ? (program.exercises.find((e) => e.id === target.exerciseId)?.name ??
+        'Removed exercise')
       : 'Cardio (Any)';
   const amount = formatRollupAmount(goal);
   if (goal.schedule.kind === 'weekly-days') {

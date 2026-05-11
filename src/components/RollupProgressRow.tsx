@@ -13,10 +13,13 @@ export function RollupProgressRow({ view }: Props) {
   const { program, goal, current, target, periodLabel } = view;
   const pct = Math.max(0, Math.min(100, (current / target) * 100));
   const formatted = formatRollupValue(goal, current, target);
+  // Bind to a local so discriminated-union narrowing carries into the
+  // arrow-fn body in .find() under `tsc -b`.
+  const goalTarget = goal.target;
   const label =
-    goal.target.kind === 'exercise'
-      ? (program.exercises.find((e) => e.id === goal.target.exerciseId)
-          ?.name ?? 'Removed exercise')
+    goalTarget.kind === 'exercise'
+      ? (program.exercises.find((e) => e.id === goalTarget.exerciseId)?.name ??
+        'Removed exercise')
       : 'Cardio (Any)';
   return (
     <div className="rounded-lg border border-border/60 border-l-[3px] border-l-accent bg-surface2 p-3 shadow-glow-accent-sm">
