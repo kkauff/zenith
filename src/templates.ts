@@ -23,13 +23,23 @@ export type CategoryTemplate = {
 
 export const CATEGORIES: CategoryTemplate[] = [
   { key: 'weightlifting', name: 'Weight Lifting', Icon: Dumbbell, available: true },
-  { key: 'running', name: 'Running', Icon: Footprints, available: false },
+  { key: 'cardio', name: 'Cardio', Icon: Footprints, available: true },
   { key: 'nutrition', name: 'Nutrition', Icon: Salad, available: false },
   { key: 'mindfulness', name: 'Mindfulness', Icon: Wind, available: false },
 ];
 
 export function getCategory(key: string): CategoryTemplate | undefined {
   return CATEGORIES.find((c) => c.key === key);
+}
+
+// Which tracking types are valid for exercises inside a program of this
+// category. Cardio programs lock out weight+reps; weightlifting programs
+// lock out cardio (cardio belongs in its own program).
+export function allowedTrackingTypesForCategory(
+  categoryKey: string,
+): import('./types').TrackingType[] {
+  if (categoryKey === 'cardio') return ['cardio'];
+  return ['weight', 'time'];
 }
 
 // Suggested exercise names per category. Users can still type anything they
@@ -124,6 +134,74 @@ export function splitDuration(seconds: number): { min: number; sec: number } {
   return { min: Math.floor(seconds / 60), sec: seconds % 60 };
 }
 
+// --- Distance / cardio --------------------------------------------------
+
+import type { CardioActivity, DistanceUnit } from './types';
+
+export function unitLabel(unit: DistanceUnit): string {
+  switch (unit) {
+    case 'miles':
+      return 'mi';
+    case 'km':
+      return 'km';
+    case 'yards':
+      return 'yd';
+    case 'meters':
+      return 'm';
+  }
+}
+
+export function formatDistance(distance: number, unit: DistanceUnit): string {
+  // Two decimals for miles/km (small numbers), integers for yards/meters
+  // (typically 50, 100, 500, etc. for swim sets).
+  const decimals = unit === 'miles' || unit === 'km' ? 2 : 0;
+  const str = distance.toFixed(decimals);
+  // Trim trailing .00 so "3.00 mi" reads as "3 mi".
+  const trimmed =
+    decimals > 0 && str.endsWith('.' + '0'.repeat(decimals))
+      ? str.slice(0, str.length - decimals - 1)
+      : str;
+  return `${trimmed} ${unitLabel(unit)}`;
+}
+
+const CARDIO_ACTIVITY_LABELS: Record<CardioActivity, string> = {
+  running: 'Running',
+  'treadmill-running': 'Treadmill Running',
+  'outdoor-bike': 'Outdoor Bike',
+  'indoor-bike': 'Indoor Bike',
+  elliptical: 'Elliptical',
+  stairmaster: 'Stairmaster',
+  swimming: 'Swimming',
+};
+
+export function cardioActivityLabel(activity: CardioActivity): string {
+  return CARDIO_ACTIVITY_LABELS[activity];
+}
+
+export const CARDIO_ACTIVITIES: CardioActivity[] = [
+  'running',
+  'treadmill-running',
+  'outdoor-bike',
+  'indoor-bike',
+  'elliptical',
+  'stairmaster',
+  'swimming',
+];
+
+// Default unit per activity. Swimming uses yards (US) by convention; the
+// rest default to miles. The user can override in the form.
+export function defaultUnitForActivity(activity: CardioActivity): DistanceUnit {
+  return activity === 'swimming' ? 'yards' : 'miles';
+}
+
+// Allowed unit choices for an activity — swimming gets pool units, the rest
+// get road units.
+export function unitOptionsForActivity(
+  activity: CardioActivity,
+): DistanceUnit[] {
+  return activity === 'swimming' ? ['yards', 'meters'] : ['miles', 'km'];
+}
+
 // --- Planned-set summary --------------------------------------------------
 
 // Compact, human summary of a planned-set list for row displays. Collapses to
@@ -178,7 +256,14 @@ export function formatPlannedSets(
 
 // --- Schedule -------------------------------------------------------------
 
-export function formatSchedule(days: number[]): string {
+import type { Schedule } from './types';
+
+export function formatSchedule(schedule: Schedule): string {
+  if (schedule.kind === 'frequency') {
+    const noun = schedule.times === 1 ? 'time' : 'times';
+    return `${schedule.times} ${noun} / ${schedule.period}`;
+  }
+  const days = schedule.days;
   if (days.length === 0) return 'No schedule';
   if (days.length === 7) return 'Every day';
   // Weekdays = Mon-Fri (1-5)

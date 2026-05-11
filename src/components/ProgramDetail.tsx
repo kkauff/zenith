@@ -1,17 +1,22 @@
 import { useState } from 'react';
 import { ArrowLeft, Download, Pencil, Plus, Trash2, X } from 'lucide-react';
-import type { Exercise, Instance, Program } from '../types';
+import type { Exercise, Instance, Program, RollupGoal } from '../types';
 import {
+  cardioActivityLabel,
+  formatDistance,
   formatDuration,
   formatPlannedSets,
   formatSchedule,
   getCategory,
 } from '../templates';
 import * as store from '../storage';
+import { summarizeRollup, summarizeRollupSchedule } from '../rollup';
+import { ConfirmDialog } from './ConfirmDialog';
 import { ExerciseForm } from './ExerciseForm';
+import { RollupGoalForm } from './RollupGoalForm';
 import { SetEditor } from './SetEditor';
 import { Button } from './ui/button';
-import { Card, CardHeader, CardTitle } from './ui/card';
+import { Card, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 
 type Props = {
@@ -19,7 +24,6 @@ type Props = {
   program: Program;
   instances: Instance[];
   onBack: () => void;
-  onLog: (exerciseId: string) => void;
   onUpdate: (program: Program) => void;
   onDelete: () => void;
   onUpdateInstance: (instance: Instance) => void;
@@ -40,13 +44,13 @@ export function ProgramDetail({
   program,
   instances,
   onBack,
-  onLog,
   onUpdate,
   onDelete,
   onUpdateInstance,
   onDeleteInstance,
 }: Props) {
   const [exporting, setExporting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const handleExport = async () => {
     setExporting(true);
@@ -80,6 +84,8 @@ export function ProgramDetail({
   const [addingExercise, setAddingExercise] = useState(false);
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
   const [editingInstanceId, setEditingInstanceId] = useState<string | null>(null);
+  const [addingRollup, setAddingRollup] = useState(false);
+  const [editingRollupId, setEditingRollupId] = useState<string | null>(null);
 
   // Group recent instances by exercise so each row shows its latest session.
   const lastByExercise = new Map<string, Instance>();
@@ -119,6 +125,38 @@ export function ProgramDetail({
     onUpdate({
       ...program,
       exercises: program.exercises.filter((e) => e.id !== id),
+    });
+  };
+
+  const addRollup = (goal: RollupGoal, autoExercise?: Exercise) => {
+    onUpdate({
+      ...program,
+      exercises: autoExercise
+        ? [...program.exercises, autoExercise]
+        : program.exercises,
+      rollupGoals: [...(program.rollupGoals ?? []), goal],
+    });
+    setAddingRollup(false);
+  };
+
+  const updateRollup = (goal: RollupGoal, autoExercise?: Exercise) => {
+    onUpdate({
+      ...program,
+      exercises: autoExercise
+        ? [...program.exercises, autoExercise]
+        : program.exercises,
+      rollupGoals: (program.rollupGoals ?? []).map((g) =>
+        g.id === goal.id ? goal : g,
+      ),
+    });
+    setEditingRollupId(null);
+  };
+
+  const removeRollup = (id: string) => {
+    if (!confirm('Remove this rollup goal?')) return;
+    onUpdate({
+      ...program,
+      rollupGoals: (program.rollupGoals ?? []).filter((g) => g.id !== id),
     });
   };
 
@@ -178,11 +216,7 @@ export function ProgramDetail({
             <Button
               variant="destructive"
               size="iconSm"
-              onClick={() => {
-                if (confirm(`Delete "${program.name}" and all its history?`)) {
-                  onDelete();
-                }
-              }}
+              onClick={() => setConfirmingDelete(true)}
               aria-label="Delete program"
             >
               <Trash2 aria-hidden />
@@ -197,18 +231,11 @@ export function ProgramDetail({
       </p>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Exercises</CardTitle>
-          {!addingExercise && editingExerciseId === null && (
-            <Button size="sm" onClick={() => setAddingExercise(true)}>
-              <Plus aria-hidden /> Add
-            </Button>
-          )}
-        </CardHeader>
+        <CardTitle className="mb-5">Exercises</CardTitle>
 
         {program.exercises.length === 0 && !addingExercise && (
           <p className="italic text-sm text-muted-foreground py-2 m-0">
-            No exercises yet. Tap “Add” to start.
+            No exercises yet. Tap “Add exercise” below to start.
           </p>
         )}
 
@@ -228,12 +255,39 @@ export function ProgramDetail({
                 );
               }
               const last = lastByExercise.get(ex.id);
-              const goal =
-                ex.trackingType === 'time' && ex.goalDurationSeconds !== undefined
-                  ? ` · goal ${formatDuration(ex.goalDurationSeconds)}`
-                  : ex.goalWeight !== undefined
-                    ? ` · goal ${ex.goalWeight} lb`
-                    : '';
+              const goal = (() => {
+                if (
+                  ex.trackingType === 'time' &&
+                  ex.goalDurationSeconds !== undefined
+                ) {
+                  return ` · goal ${formatDuration(ex.goalDurationSeconds)}`;
+                }
+                if (ex.trackingType === 'weight' && ex.goalWeight !== undefined) {
+                  return ` · goal ${ex.goalWeight} lb`;
+                }
+                if (ex.trackingType === 'cardio') {
+                  if (
+                    ex.cardioGoalKind === 'time' &&
+                    ex.goalDurationSeconds !== undefined
+                  ) {
+                    return ` · goal ${formatDuration(ex.goalDurationSeconds)}`;
+                  }
+                  if (
+                    ex.cardioGoalKind === 'distance' &&
+                    ex.goalDistance !== undefined &&
+                    ex.cardioUnit
+                  ) {
+                    return ` · goal ${formatDistance(ex.goalDistance, ex.cardioUnit)}`;
+                  }
+                }
+                return '';
+              })();
+              const middleLine =
+                ex.trackingType === 'cardio'
+                  ? ex.cardioActivity
+                    ? cardioActivityLabel(ex.cardioActivity)
+                    : 'Cardio'
+                  : formatPlannedSets(ex.plannedSets, ex.trackingType);
               return (
                 <li
                   key={ex.id}
@@ -244,8 +298,7 @@ export function ProgramDetail({
                       <strong className="font-semibold">{ex.name}</strong>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {formatSchedule(ex.schedule.days)} ·{' '}
-                      {formatPlannedSets(ex.plannedSets, ex.trackingType)}
+                      {formatSchedule(ex.schedule)} · {middleLine}
                       {goal}
                     </div>
                     {last && (
@@ -255,10 +308,7 @@ export function ProgramDetail({
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Button size="sm" onClick={() => onLog(ex.id)}>
-                      Log
-                    </Button>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
                     <Button
                       variant="secondary"
                       size="iconSm"
@@ -291,10 +341,105 @@ export function ProgramDetail({
             />
           </div>
         )}
+
+        {!addingExercise && editingExerciseId === null && (
+          <Button
+            onClick={() => setAddingExercise(true)}
+            className="mt-3 w-full"
+          >
+            <Plus aria-hidden /> Add exercise
+          </Button>
+        )}
       </Card>
 
+      {program.categoryKey === 'cardio' && (
+        <Card>
+          <CardTitle className="mb-5">Cardio goals</CardTitle>
+
+          {(program.rollupGoals ?? []).length === 0 && !addingRollup && (
+            <p className="italic text-sm text-muted-foreground py-2 m-0">
+              Aggregate cardio goals — e.g. “5 mi of Running per week” or
+              “6 hr of any cardio per week” or “30 min cardio on Mondays.”
+            </p>
+          )}
+
+          {(program.rollupGoals ?? []).length > 0 && (
+            <ul className="flex flex-col gap-2 list-none m-0 p-0">
+              {(program.rollupGoals ?? []).map((g) => {
+                if (editingRollupId === g.id) {
+                  return (
+                    <li key={g.id} className="rounded-lg bg-surface2 p-3.5">
+                      <RollupGoalForm
+                        program={program}
+                        initial={g}
+                        onSave={updateRollup}
+                        onCancel={() => setEditingRollupId(null)}
+                      />
+                    </li>
+                  );
+                }
+                return (
+                  <li
+                    key={g.id}
+                    className="flex items-start gap-2 rounded-lg bg-surface2 p-3.5"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div>
+                        <strong className="font-semibold">
+                          {summarizeRollup(g, program)}
+                        </strong>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {summarizeRollupSchedule(g)}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <Button
+                        variant="secondary"
+                        size="iconSm"
+                        onClick={() => setEditingRollupId(g.id)}
+                        aria-label="Edit cardio goal"
+                      >
+                        <Pencil aria-hidden />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="iconSm"
+                        onClick={() => removeRollup(g.id)}
+                        aria-label="Remove cardio goal"
+                      >
+                        <X aria-hidden />
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {addingRollup && (
+            <div className="mt-3 rounded-lg bg-surface2 p-3.5">
+              <RollupGoalForm
+                program={program}
+                onSave={addRollup}
+                onCancel={() => setAddingRollup(false)}
+              />
+            </div>
+          )}
+
+          {!addingRollup && editingRollupId === null && (
+            <Button
+              onClick={() => setAddingRollup(true)}
+              className="mt-3 w-full"
+            >
+              <Plus aria-hidden /> Add cardio goal
+            </Button>
+          )}
+        </Card>
+      )}
+
       <Card>
-        <CardTitle className="mb-2">Recent sessions</CardTitle>
+        <CardTitle className="mb-5">Recent sessions</CardTitle>
         {instances.length === 0 ? (
           <p className="italic text-sm text-muted-foreground py-2 m-0">
             No sessions logged yet.
@@ -321,6 +466,9 @@ export function ProgramDetail({
                       onLog={(sets, notes) => {
                         onUpdateInstance({
                           ...inst,
+                          exerciseName: inst.exerciseName ?? ex.name,
+                          trackingType: inst.trackingType ?? ex.trackingType,
+                          cardioUnit: inst.cardioUnit ?? ex.cardioUnit,
                           sets,
                           notes: notes.trim() || undefined,
                         });
@@ -338,7 +486,7 @@ export function ProgramDetail({
                   <div className="flex-1 min-w-0">
                     <div>
                       <strong className="font-semibold">
-                        {ex?.name ?? 'Removed exercise'}
+                        {ex?.name ?? inst.exerciseName ?? 'Removed exercise'}
                       </strong>
                     </div>
                     <div className="text-xs text-muted-foreground">
@@ -379,17 +527,36 @@ export function ProgramDetail({
           </ul>
         )}
       </Card>
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        title={`Delete "${program.name}"?`}
+        description="This removes the program but keeps every session you've already logged. Progress for those exercises will still show up under My Progress and roll forward into any new program with the same exercise name."
+        confirmLabel="Delete program"
+        destructive
+        onConfirm={() => {
+          setConfirmingDelete(false);
+          onDelete();
+        }}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </div>
   );
 }
 
 function summarizeSets(inst: Instance): string {
   if (inst.sets.length === 0) return 'No sets recorded';
+  const unit = inst.cardioUnit ?? 'miles';
   return inst.sets
     .map((s) => {
+      if (s.distance !== undefined && s.durationSeconds !== undefined) {
+        return `${formatDistance(s.distance, unit)} · ${formatDuration(s.durationSeconds)}`;
+      }
+      if (s.distance !== undefined) return formatDistance(s.distance, unit);
       if (s.durationSeconds !== undefined) return formatDuration(s.durationSeconds);
       if (s.weight !== undefined && s.reps !== undefined) return `${s.weight}×${s.reps}`;
       return '—';
     })
     .join(', ');
 }
+

@@ -4,10 +4,9 @@
 
 /* Knewave Outline by Tyler Finck — The League of Moveable Type (OFL) */
 @font-face {
-  font-family: 'Knewave Outline';
-  src:
-    url('/fonts/knewave-outline.woff') format('woff'),
-    url('/fonts/knewave-outline.ttf') format('truetype');
+  font-family: "Knewave Outline";
+  src: url("/fonts/knewave-outline.woff") format("woff"),
+    url("/fonts/knewave-outline.ttf") format("truetype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -38,6 +37,15 @@
 
     --accent: 342 100% 71%;
     --accent-foreground: 340 60% 8%;
+
+    /* Neon highlighter yellow for rest / sick / injury days. Hue 58°
+       sits just warm of pure 60° yellow — keeps the electric-marker feel
+       without sliding into green-yellow. Lightness is pushed up to ~64%
+       to match the brightness of the pink accent (71%) so the trio
+       (cyan / pink / yellow) read as a coherent neon palette rather
+       than a buttercup outlier. */
+    --rest: 76 100% 65%;
+    --rest-foreground: 76 60% 8%;
 
     --muted: 218 22% 16%;
     --muted-foreground: 215 16% 65%;
@@ -94,35 +102,63 @@
      itself is already an outline; we add a soft cyan glow so it reads as a
      neon sign on the dark background. */
   .font-display {
-    font-family: 'Knewave Outline', cursive;
+    font-family: "Knewave Outline", cursive;
     font-weight: 400;
     letter-spacing: 0.02em;
     color: hsl(var(--foreground));
-    text-shadow:
-      0 0 6px hsl(var(--primary) / 0.55),
+    text-shadow: 0 0 6px hsl(var(--primary) / 0.55),
       0 0 18px hsl(var(--primary) / 0.35);
   }
 
   .font-display-accent {
-    font-family: 'Knewave Outline', cursive;
+    font-family: "Knewave Outline", cursive;
     font-weight: 400;
     letter-spacing: 0.02em;
     color: hsl(var(--foreground));
-    text-shadow:
-      0 0 6px hsl(var(--accent) / 0.55),
+    text-shadow: 0 0 6px hsl(var(--accent) / 0.55),
       0 0 18px hsl(var(--accent) / 0.35);
+  }
+
+  /* Pulsating "Z" used on the loading splash. The font-display utility
+     defaults to a cyan glow — we override with accent pink and animate the
+     glow + scale so the brand mark breathes while data loads. */
+  .splash-z {
+    display: inline-block;
+    color: hsl(var(--accent));
+    text-shadow: none;
+    animation: splash-z-pulse 1.4s ease-in-out infinite;
+    will-change: transform, text-shadow, opacity;
+  }
+}
+
+@keyframes splash-z-pulse {
+  0%,
+  100% {
+    transform: scale(0.92);
+    opacity: 0.65;
+    text-shadow: 0 0 6px hsl(var(--accent) / 0.5),
+      0 0 14px hsl(var(--accent) / 0.25);
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+    text-shadow: 0 0 20px hsl(var(--accent) / 0.95),
+      0 0 38px hsl(var(--accent) / 0.7),
+      0 0 64px hsl(var(--accent) / 0.4);
   }
 }
 
 @layer utilities {
   .text-glow-primary {
-    text-shadow:
-      0 0 6px hsl(var(--primary) / 0.55),
+    text-shadow: 0 0 6px hsl(var(--primary) / 0.55),
       0 0 16px hsl(var(--primary) / 0.3);
   }
   .text-glow-accent {
-    text-shadow:
-      0 0 6px hsl(var(--accent) / 0.55),
+    text-shadow: 0 0 6px hsl(var(--accent) / 0.55),
       0 0 16px hsl(var(--accent) / 0.3);
+  }
+  .text-glow-rest {
+    text-shadow: 0 0 6px hsl(var(--rest) / 0.55),
+      0 0 16px hsl(var(--rest) / 0.3);
   }
 }

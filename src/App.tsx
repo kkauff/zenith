@@ -6,21 +6,20 @@ import { NewProgram } from './components/NewProgram';
 import { ProgramDetail } from './components/ProgramDetail';
 import { ProgramsScreen } from './components/ProgramsScreen';
 import { ProgressScreen } from './components/ProgressScreen';
-import { LogInstance } from './components/LogInstance';
+import { SplashScreen } from './components/SplashScreen';
 import { Button } from './components/ui/button';
 import { Card } from './components/ui/card';
 import * as auth from './auth';
 import * as store from './storage';
 import type { AuthUser } from './auth';
-import type { Instance, Program } from './types';
+import type { Instance, LibraryExercise, Program, RestDay } from './types';
 
 type View =
   | { kind: 'home' }
   | { kind: 'programs' }
   | { kind: 'progress' }
   | { kind: 'newProgram' }
-  | { kind: 'program'; programId: string }
-  | { kind: 'logInstance'; programId: string; exerciseId: string };
+  | { kind: 'program'; programId: string };
 
 function NotFound({ onHome }: { onHome: () => void }) {
   return (
@@ -35,14 +34,13 @@ function NotFound({ onHome }: { onHome: () => void }) {
 }
 
 // Map our internal view type onto the three nav-menu destinations so the
-// header can highlight the active one. Sub-screens (program detail, log,
-// new program) bucket under 'programs' since they're not menu destinations.
+// header can highlight the active one. Sub-screens (program detail, new
+// program) bucket under 'programs' since they're not menu destinations.
 function navFor(view: View): NavView {
   switch (view.kind) {
     case 'programs':
     case 'newProgram':
     case 'program':
-    case 'logInstance':
       return 'programs';
     case 'progress':
       return 'progress';
@@ -51,12 +49,28 @@ function navFor(view: View): NavView {
   }
 }
 
+// Minimum time the splash stays visible on first app open. Long enough for
+// the branding pulse to register, short enough to not feel sluggish.
+const MIN_SPLASH_MS = 1500;
+
 export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [instances, setInstances] = useState<Instance[]>([]);
+  const [library, setLibrary] = useState<LibraryExercise[]>([]);
+  const [restDays, setRestDays] = useState<RestDay[]>([]);
   const [view, setView] = useState<View>({ kind: 'home' });
+  // Each flag flips true the first time its Firestore snapshot is delivered,
+  // so we can wait until real data is in-hand before rendering the app and
+  // avoid the "no programs" flash on cold start.
+  const [loaded, setLoaded] = useState({
+    programs: false,
+    instances: false,
+    library: false,
+    restDays: false,
+  });
+  const [splashElapsed, setSplashElapsed] = useState(false);
 
   // Subscribe to Firebase auth state. Fires once on mount with the current
   // session (or null), then again on every sign-in/sign-out.
@@ -67,6 +81,11 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => {
+    const t = setTimeout(() => setSplashElapsed(true), MIN_SPLASH_MS);
+    return () => clearTimeout(t);
+  }, []);
+
   // While signed in, keep state synced with Firestore via onSnapshot. All
   // listeners auto-fire on remote changes too — so logging on phone updates
   // laptop and vice-versa.
@@ -74,14 +93,44 @@ export default function App() {
     if (!user) {
       setPrograms([]);
       setInstances([]);
+      setLibrary([]);
+      setRestDays([]);
+      setLoaded({
+        programs: false,
+        instances: false,
+        library: false,
+        restDays: false,
+      });
       setView({ kind: 'home' });
       return;
     }
-    const unsubP = store.subscribePrograms(user.sub, setPrograms);
-    const unsubI = store.subscribeInstances(user.sub, setInstances);
+    // Idempotent backfill of the exercise library from any pre-library
+    // programs. Runs in the background; the subscriber below will pick up
+    // the writes on the next snapshot.
+    store.backfillExerciseLibrary(user.sub).catch((err) => {
+      console.error('Library backfill failed:', err);
+    });
+    const unsubP = store.subscribePrograms(user.sub, (next) => {
+      setPrograms(next);
+      setLoaded((s) => (s.programs ? s : { ...s, programs: true }));
+    });
+    const unsubI = store.subscribeInstances(user.sub, (next) => {
+      setInstances(next);
+      setLoaded((s) => (s.instances ? s : { ...s, instances: true }));
+    });
+    const unsubL = store.subscribeExerciseLibrary(user.sub, (next) => {
+      setLibrary(next);
+      setLoaded((s) => (s.library ? s : { ...s, library: true }));
+    });
+    const unsubR = store.subscribeRestDays(user.sub, (next) => {
+      setRestDays(next);
+      setLoaded((s) => (s.restDays ? s : { ...s, restDays: true }));
+    });
     return () => {
       unsubP();
       unsubI();
+      unsubL();
+      unsubR();
     };
   }, [user]);
 
@@ -121,7 +170,26 @@ export default function App() {
     await store.deleteInstance(user.sub, id);
   };
 
-  if (!authReady) return null;
+  const saveRestDay = async (restDay: RestDay) => {
+    if (!user) return;
+    await store.saveRestDay(user.sub, restDay);
+  };
+
+  const deleteRestDay = async (date: string) => {
+    if (!user) return;
+    await store.deleteRestDay(user.sub, date);
+  };
+
+  // Show the splash until: auth resolves, the minimum splash window passes,
+  // and — if signed in — all four Firestore subscriptions have delivered
+  // their first snapshot. Skip the data wait on the Login screen so signed-
+  // out users aren't held hostage by the timer past the splash window.
+  const dataReady =
+    !user ||
+    (loaded.programs && loaded.instances && loaded.library && loaded.restDays);
+  if (!authReady || !splashElapsed || !dataReady) {
+    return <SplashScreen />;
+  }
   if (!user) return <Login />;
 
   const goHome = () => setView({ kind: 'home' });
@@ -139,12 +207,18 @@ export default function App() {
       <Home
         programs={programs}
         instances={instances}
+        library={library}
+        restDays={restDays}
         today={today}
         userName={user.name}
         onNew={() => setView({ kind: 'newProgram' })}
+        onSeeProgress={() => setView({ kind: 'progress' })}
+        onManagePrograms={() => setView({ kind: 'programs' })}
         onLogInstance={addInstance}
         onUpdateInstance={updateInstance}
         onDeleteInstance={deleteInstance}
+        onSaveRestDay={saveRestDay}
+        onDeleteRestDay={deleteRestDay}
       />
     );
   } else if (view.kind === 'programs') {
@@ -162,8 +236,11 @@ export default function App() {
       <ProgressScreen
         programs={programs}
         instances={instances}
+        library={library}
+        restDays={restDays}
         today={today}
         onBack={goHome}
+        onDeleteInstance={deleteInstance}
       />
     );
   } else if (view.kind === 'newProgram') {
@@ -185,33 +262,10 @@ export default function App() {
           program={program}
           instances={programInstances}
           onBack={() => setView({ kind: 'programs' })}
-          onLog={(exerciseId) =>
-            setView({ kind: 'logInstance', programId: program.id, exerciseId })
-          }
           onUpdate={updateProgram}
           onDelete={() => deleteProgram(program.id)}
           onUpdateInstance={updateInstance}
           onDeleteInstance={deleteInstance}
-        />
-      );
-    }
-  } else {
-    const program = programs.find((p) => p.id === view.programId);
-    const exercise = program?.exercises.find((e) => e.id === view.exerciseId);
-    if (!program || !exercise) {
-      body = <NotFound onHome={goHome} />;
-    } else {
-      body = (
-        <LogInstance
-          program={program}
-          exercise={exercise}
-          onSave={(fields) => {
-            addInstance(fields);
-            setView({ kind: 'program', programId: fields.programId });
-          }}
-          onCancel={() =>
-            setView({ kind: 'program', programId: program.id })
-          }
         />
       );
     }

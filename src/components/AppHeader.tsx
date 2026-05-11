@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { Activity, FileText, LogOut, Menu } from 'lucide-react';
-import type { AuthUser } from '../auth';
-import { Brand } from './ui/brand';
-import { Button } from './ui/button';
+import { useEffect, useRef, useState } from "react";
+import { Activity, FileText, Home as HomeIcon, LogOut, Menu } from "lucide-react";
+import type { AuthUser } from "../auth";
+import { Brand } from "./ui/brand";
+import { Button } from "./ui/button";
 
-export type NavView = 'home' | 'programs' | 'progress';
+export type NavView = "home" | "programs" | "progress";
 
 type Props = {
   user: AuthUser;
@@ -32,16 +32,16 @@ export function AppHeader({ user, current, onNavigate, onSignOut }: Props) {
       }
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         setNavOpen(false);
         setAcctOpen(false);
       }
     };
-    window.addEventListener('mousedown', onDocMouseDown);
-    window.addEventListener('keydown', onKey);
+    window.addEventListener("mousedown", onDocMouseDown);
+    window.addEventListener("keydown", onKey);
     return () => {
-      window.removeEventListener('mousedown', onDocMouseDown);
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener("mousedown", onDocMouseDown);
+      window.removeEventListener("keydown", onKey);
     };
   }, [navOpen, acctOpen]);
 
@@ -54,11 +54,14 @@ export function AppHeader({ user, current, onNavigate, onSignOut }: Props) {
     <header className="flex items-center justify-between gap-3 pt-1">
       <button
         type="button"
-        onClick={() => go('home')}
+        onClick={() => go("home")}
         aria-label="Home"
-        className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+        className="flex items-baseline gap-2 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
       >
         <Brand as="h1" className="text-3xl leading-none m-0" />
+        <span className="hidden sm:inline text-xs italic text-muted-foreground">
+          See you at the top!
+        </span>
       </button>
 
       <div className="flex items-center gap-2">
@@ -82,16 +85,22 @@ export function AppHeader({ user, current, onNavigate, onSignOut }: Props) {
               className="absolute right-0 top-full mt-2 z-20 w-52 overflow-hidden rounded-lg border border-border/60 bg-card shadow-lg"
             >
               <NavItem
+                icon={HomeIcon}
+                label="Home"
+                active={current === "home"}
+                onClick={() => go("home")}
+              />
+              <NavItem
                 icon={FileText}
                 label="My Programs"
-                active={current === 'programs'}
-                onClick={() => go('programs')}
+                active={current === "programs"}
+                onClick={() => go("programs")}
               />
               <NavItem
                 icon={Activity}
                 label="My Progress"
-                active={current === 'progress'}
-                onClick={() => go('progress')}
+                active={current === "progress"}
+                onClick={() => go("progress")}
               />
             </div>
           )}
@@ -192,12 +201,14 @@ function NavItem({
       role="menuitem"
       onClick={onClick}
       className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-surface2/60 focus-visible:outline-none focus-visible:bg-surface2/60 ${
-        active ? 'text-primary' : 'text-foreground'
+        active ? "text-primary" : "text-foreground"
       }`}
     >
       <Icon
         aria-hidden
-        className={`size-4 ${active ? 'text-primary' : 'text-muted-foreground'}`}
+        className={`size-4 ${
+          active ? "text-primary" : "text-muted-foreground"
+        }`}
       />
       {label}
     </button>

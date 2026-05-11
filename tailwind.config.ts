@@ -41,6 +41,10 @@ const config: Config = {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
         },
+        rest: {
+          DEFAULT: 'hsl(var(--rest))',
+          foreground: 'hsl(var(--rest-foreground))',
+        },
         surface2: 'hsl(var(--surface-2))',
       },
       borderRadius: {
@@ -65,6 +69,8 @@ const config: Config = {
         'glow-primary-sm': '0 0 12px -2px hsl(var(--primary) / 0.45)',
         'glow-accent': '0 0 24px -4px hsl(var(--accent) / 0.55)',
         'glow-accent-sm': '0 0 12px -2px hsl(var(--accent) / 0.45)',
+        'glow-rest': '0 0 24px -4px hsl(var(--rest) / 0.55)',
+        'glow-rest-sm': '0 0 12px -2px hsl(var(--rest) / 0.45)',
       },
       keyframes: {
         'glow-pulse': {

@@ -25,7 +25,7 @@ export function SchedulePicker({ days, onChange }: Props) {
             aria-pressed={active}
             onClick={() => toggleDay(i)}
             className={cn(
-              'flex-1 min-w-0 h-11 rounded-full font-semibold text-[15px] transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+              'flex-1 min-w-0 h-9 rounded-full font-semibold text-sm transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
               active
                 ? 'bg-primary text-primary-foreground border-2 border-primary shadow-glow-primary-sm'
                 : 'bg-surface2 text-muted-foreground border-2 border-border hover:border-primary/40',

@@ -21,7 +21,7 @@ export const CardHeader = forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn('flex items-center justify-between mb-3', className)}
+    className={cn('flex items-center justify-between mb-5', className)}
     {...props}
   />
 ));

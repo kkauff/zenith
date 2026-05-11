@@ -1,147 +1,142 @@
-import { TrendingDown, TrendingUp, Minus } from 'lucide-react';
-import type { Instance, Program } from '../types';
-import { Card } from './ui/card';
+import { useMemo, useState } from 'react';
+import { Minus, TrendingDown, TrendingUp } from 'lucide-react';
+import type {
+  ExerciseTag,
+  Instance,
+  LibraryExercise,
+  Program,
+} from '../types';
+import { CARDIO_TAGS, TAG_LABEL, WEIGHTLIFTING_TAGS } from '../types';
+import {
+  resolveExerciseName,
+  resolveExerciseTags,
+  resolveTrackingType,
+} from '../instance';
+import { Card, CardTitle } from './ui/card';
+import {
+  MultiselectDropdown,
+  SelectedPillChips,
+} from './MultiselectDropdown';
+import { cn } from '@/lib/utils';
 
 type Props = {
   programs: Program[];
   instances: Instance[];
+  library: LibraryExercise[];
   today: Date;
 };
 
-// One "score" per logged instance — what we track over time.
-// Weight-tracked: best (weight × reps) across the session's sets.
-// Time-tracked: longest hold across the session's sets.
-function instanceScore(
-  inst: Instance,
-  trackingType: 'weight' | 'time',
-): number | null {
-  if (trackingType === 'time') {
-    let best = 0;
-    for (const s of inst.sets) {
-      if (s.durationSeconds !== undefined && s.durationSeconds > best) {
-        best = s.durationSeconds;
-      }
-    }
-    return best > 0 ? best : null;
-  }
-  let best = 0;
-  for (const s of inst.sets) {
-    if (s.weight !== undefined && s.reps !== undefined) {
-      const v = s.weight * s.reps;
-      if (v > best) best = v;
-    }
-  }
-  return best > 0 ? best : null;
-}
-
-const BUCKETS = 8; // weeks shown on the chart
+const BUCKETS = 8; // weekly buckets shown on each chart
 const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
 
-// Build a normalized strength-trend series across all weight- and time-tracked
-// exercises. Each exercise is normalized to its earliest score (=1.0) so we
-// can average across exercises with different units / scales.
-//
-// Returns BUCKETS values (one per week, oldest → newest). Buckets with no
-// data are filled forward from the previous bucket. If we never see any data,
-// every bucket is 1.
-function buildTrend(programs: Program[], instances: Instance[], today: Date) {
-  const exerciseTypes = new Map<string, 'weight' | 'time'>();
-  for (const p of programs) {
-    for (const e of p.exercises) {
-      exerciseTypes.set(e.id, e.trackingType);
-    }
-  }
+type Category = 'strength' | 'cardio';
 
-  // Group instances per exercise, in chronological order.
-  const byExercise = new Map<string, Instance[]>();
-  for (const inst of instances) {
-    if (!exerciseTypes.has(inst.exerciseId)) continue;
-    const list = byExercise.get(inst.exerciseId) ?? [];
-    list.push(inst);
-    byExercise.set(inst.exerciseId, list);
-  }
-  for (const list of byExercise.values()) {
-    list.sort((a, b) => a.loggedAt - b.loggedAt);
-  }
-
-  const endMs = today.getTime();
-  const startMs = endMs - BUCKETS * MS_PER_WEEK;
-
-  // Per bucket: sum of normalized scores + count of contributing exercises.
-  const sums = new Array<number>(BUCKETS).fill(0);
-  const counts = new Array<number>(BUCKETS).fill(0);
-  let totalDataPoints = 0;
-
-  for (const [exId, list] of byExercise) {
-    const tt = exerciseTypes.get(exId)!;
-    let baseline: number | null = null;
-    // Per bucket: best score from this exercise in that week (if any).
-    const perBucket = new Array<number | null>(BUCKETS).fill(null);
-    for (const inst of list) {
-      const score = instanceScore(inst, tt);
-      if (score === null) continue;
-      if (baseline === null) baseline = score;
-      if (inst.loggedAt < startMs) continue;
-      const idx = Math.min(
-        BUCKETS - 1,
-        Math.floor((inst.loggedAt - startMs) / MS_PER_WEEK),
-      );
-      const cur = perBucket[idx];
-      if (cur === null || score > cur) perBucket[idx] = score;
-    }
-    if (baseline === null || baseline === 0) continue;
-    for (let i = 0; i < BUCKETS; i++) {
-      const v = perBucket[i];
-      if (v !== null) {
-        sums[i] += v / baseline;
-        counts[i] += 1;
-        totalDataPoints += 1;
+// Per-instance contribution to the weekly volume bucket.
+//   Strength: weighted sets add weight × reps (lb-reps); time-held sets
+//             (planks etc.) add durationSeconds directly. Same axis, no
+//             unit conversion — a heavy lift naturally dwarfs a hold, which
+//             tracks how the work actually compares.
+//   Cardio:   total durationSeconds across sets. Universal across activities
+//             — running miles vs swimming yards can't add together cleanly,
+//             but minutes always can.
+function instanceVolume(
+  inst: Instance,
+  category: Category,
+  programs: Program[],
+  library: LibraryExercise[],
+): number {
+  const tt = resolveTrackingType(inst, programs, library);
+  if (category === 'strength') {
+    if (tt !== 'weight' && tt !== 'time') return 0;
+    let total = 0;
+    for (const s of inst.sets) {
+      if (s.weight !== undefined && s.reps !== undefined) {
+        total += s.weight * s.reps;
+      }
+      if (s.durationSeconds !== undefined) {
+        total += s.durationSeconds;
       }
     }
+    return total;
   }
-
-  // Average per bucket; fill empty buckets from the previous (or from 1.0 at
-  // the start if nothing has happened yet).
-  const series = new Array<number>(BUCKETS);
-  let last = 1;
-  for (let i = 0; i < BUCKETS; i++) {
-    if (counts[i] > 0) {
-      last = sums[i] / counts[i];
-    }
-    series[i] = last;
+  if (tt !== 'cardio') return 0;
+  let total = 0;
+  for (const s of inst.sets) {
+    if (s.durationSeconds !== undefined) total += s.durationSeconds;
   }
-
-  return { series, totalDataPoints };
+  return total;
 }
 
-function Sparkline({
-  values,
+function buildWeeklyVolume(
+  instances: Instance[],
+  programs: Program[],
+  library: LibraryExercise[],
+  today: Date,
+  category: Category,
+  filter?: (inst: Instance) => boolean,
+): number[] {
+  const endMs = today.getTime();
+  const startMs = endMs - BUCKETS * MS_PER_WEEK;
+  const series = new Array<number>(BUCKETS).fill(0);
+  for (const inst of instances) {
+    if (inst.loggedAt < startMs || inst.loggedAt > endMs) continue;
+    if (filter && !filter(inst)) continue;
+    const idx = Math.min(
+      BUCKETS - 1,
+      Math.floor((inst.loggedAt - startMs) / MS_PER_WEEK),
+    );
+    series[idx] += instanceVolume(inst, category, programs, library);
+  }
+  return series;
+}
+
+function formatStrengthVolume(n: number): string {
+  return Math.round(n).toLocaleString();
+}
+
+function formatCardioVolume(seconds: number): string {
+  if (seconds <= 0) return '0';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m} min`;
+}
+
+// Two-line sparkline. Primary line always renders; accent line renders on
+// top when filter is active. Both share the same y-scale (min anchored at
+// 0, max = max across both series) so the lines are directly comparable.
+function DualSparkline({
+  primary,
+  accent,
   width = 320,
   height = 80,
 }: {
-  values: number[];
+  primary: number[];
+  accent: number[] | null;
   width?: number;
   height?: number;
 }) {
   const pad = 6;
   const innerW = width - pad * 2;
   const innerH = height - pad * 2;
+  const allValues = accent ? [...primary, ...accent] : primary;
+  const max = Math.max(...allValues, 1);
 
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  // Avoid divide-by-zero (flat series). Center the line vertically.
-  const span = max - min < 0.0001 ? 1 : max - min;
-  const xs = values.map((_, i) =>
-    values.length === 1 ? innerW / 2 : (i / (values.length - 1)) * innerW,
-  );
-  const ys = values.map((v) =>
-    max - min < 0.0001 ? innerH / 2 : innerH - ((v - min) / span) * innerH,
-  );
+  const buildPath = (vals: number[]): string => {
+    const xs = vals.map((_, i) =>
+      vals.length === 1 ? innerW / 2 : (i / (vals.length - 1)) * innerW,
+    );
+    const ys = vals.map((v) => innerH - (v / max) * innerH);
+    return xs
+      .map((x, i) => `${i === 0 ? 'M' : 'L'} ${x + pad} ${ys[i] + pad}`)
+      .join(' ');
+  };
 
-  const linePath = xs
-    .map((x, i) => `${i === 0 ? 'M' : 'L'} ${x + pad} ${ys[i] + pad}`)
-    .join(' ');
-  const areaPath = `${linePath} L ${xs[xs.length - 1] + pad} ${innerH + pad} L ${pad} ${innerH + pad} Z`;
+  const primaryPath = buildPath(primary);
+  const accentPath = accent ? buildPath(accent) : null;
+  const primaryLast = primary[primary.length - 1];
+  const primaryArea = `${primaryPath} L ${pad + innerW} ${innerH + pad} L ${pad} ${innerH + pad} Z`;
 
   return (
     <svg
@@ -152,75 +147,273 @@ function Sparkline({
       className="block"
     >
       <defs>
-        <linearGradient id="trend-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.35" />
+        <linearGradient id="volume-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.3" />
           <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path d={areaPath} fill="url(#trend-fill)" />
+      {primaryLast > 0 && <path d={primaryArea} fill="url(#volume-fill)" />}
       <path
-        d={linePath}
+        d={primaryPath}
         fill="none"
         stroke="hsl(var(--primary))"
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+      {accentPath && (
+        <path
+          d={accentPath}
+          fill="none"
+          stroke="hsl(var(--accent))"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
     </svg>
   );
 }
 
-export function ProgressPanel({ programs, instances, today }: Props) {
-  const { series, totalDataPoints } = buildTrend(programs, instances, today);
+type Direction = 'up' | 'down' | 'flat';
 
-  // Need at least two contributing data points for a meaningful trend.
-  const hasTrend = totalDataPoints >= 2;
+function direction(series: number[], threshold = 0.05): Direction {
   const first = series[0];
   const last = series[series.length - 1];
-  const delta = last - first;
-  const pct = Math.round(delta * 100);
+  if (first === 0 && last === 0) return 'flat';
+  if (first === 0) return last > 0 ? 'up' : 'flat';
+  const delta = (last - first) / first;
+  if (Math.abs(delta) < threshold) return 'flat';
+  return delta > 0 ? 'up' : 'down';
+}
 
-  const direction =
-    !hasTrend || Math.abs(delta) < 0.01
-      ? 'flat'
-      : delta > 0
-        ? 'up'
-        : 'down';
+function TrendIcon({
+  dir,
+  className,
+}: {
+  dir: Direction;
+  className?: string;
+}) {
+  const Icon =
+    dir === 'up' ? TrendingUp : dir === 'down' ? TrendingDown : Minus;
+  return <Icon aria-hidden className={cn('size-4', className)} />;
+}
 
-  const TrendIcon =
-    direction === 'up'
-      ? TrendingUp
-      : direction === 'down'
-        ? TrendingDown
-        : Minus;
 
-  const trendColor =
-    direction === 'up'
-      ? 'text-primary'
-      : direction === 'down'
-        ? 'text-destructive'
-        : 'text-muted-foreground';
+function VolumeChart({
+  title,
+  category,
+  tagOptions,
+  programs,
+  instances,
+  library,
+  today,
+  formatValue,
+}: {
+  title: string;
+  category: Category;
+  tagOptions: readonly ExerciseTag[];
+  programs: Program[];
+  instances: Instance[];
+  library: LibraryExercise[];
+  today: Date;
+  formatValue: (n: number) => string;
+}) {
+  const [selectedTags, setSelectedTags] = useState<ExerciseTag[]>([]);
+  const [selectedExercises, setSelectedExercises] = useState<string[]>([]);
 
-  const trendLabel = !hasTrend
-    ? 'Not enough data'
-    : direction === 'flat'
-      ? 'Holding steady'
-      : `${pct > 0 ? '+' : ''}${pct}% over 8 wks`;
+  // Available exercise chips — anything in the chart's category that's been
+  // logged in the last BUCKETS weeks. Keeps the filter list relevant and
+  // short.
+  const availableExercises = useMemo(() => {
+    const cutoff = today.getTime() - BUCKETS * MS_PER_WEEK;
+    const seen = new Set<string>();
+    const out: { id: string; name: string }[] = [];
+    for (const inst of instances) {
+      if (inst.loggedAt < cutoff) continue;
+      const tt = resolveTrackingType(inst, programs, library);
+      if (category === 'strength' && tt !== 'weight' && tt !== 'time') continue;
+      if (category === 'cardio' && tt !== 'cardio') continue;
+      if (seen.has(inst.exerciseId)) continue;
+      seen.add(inst.exerciseId);
+      const name = resolveExerciseName(inst, programs, library);
+      if (name) out.push({ id: inst.exerciseId, name });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  }, [instances, programs, library, today, category]);
+
+  const overall = useMemo(
+    () => buildWeeklyVolume(instances, programs, library, today, category),
+    [instances, programs, library, today, category],
+  );
+
+  const filterActive =
+    selectedTags.length > 0 || selectedExercises.length > 0;
+
+  const filtered = useMemo(() => {
+    if (!filterActive) return null;
+    const tagSet = new Set(selectedTags);
+    const exSet = new Set(selectedExercises);
+    return buildWeeklyVolume(
+      instances,
+      programs,
+      library,
+      today,
+      category,
+      (inst) => {
+        if (exSet.has(inst.exerciseId)) return true;
+        if (tagSet.size === 0) return false;
+        const tags = resolveExerciseTags(inst, programs, library);
+        return tags.some((t) => tagSet.has(t));
+      },
+    );
+  }, [
+    filterActive,
+    selectedTags,
+    selectedExercises,
+    instances,
+    programs,
+    library,
+    today,
+    category,
+  ]);
+
+  const toggleTag = (t: ExerciseTag) => {
+    setSelectedTags((cur) =>
+      cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t],
+    );
+  };
+  const toggleExercise = (id: string) => {
+    setSelectedExercises((cur) =>
+      cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
+    );
+  };
+
+  const overallThis = overall[overall.length - 1];
+  const overallDir = direction(overall);
+  const filteredThis = filtered ? filtered[filtered.length - 1] : 0;
+  const filteredDir = filtered ? direction(filtered) : 'flat';
+  const hasAnyOverall = overall.some((v) => v > 0);
 
   return (
-    <Card className="flex flex-col gap-2">
+    <Card className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">
-          Strength
-        </span>
-        <TrendIcon aria-hidden className={`size-4 ${trendColor}`} />
+        <CardTitle>{title}</CardTitle>
+        <TrendIcon
+          dir={overallDir}
+          className={cn(
+            overallDir === 'up'
+              ? 'text-primary'
+              : overallDir === 'down'
+                ? 'text-destructive'
+                : 'text-muted-foreground',
+          )}
+        />
       </div>
-      <div className="-mx-1">
-        <Sparkline values={series} />
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        {tagOptions.map((t) => {
+          const active = selectedTags.includes(t);
+          return (
+            <button
+              key={t}
+              type="button"
+              aria-pressed={active}
+              onClick={() => toggleTag(t)}
+              className={cn(
+                'inline-flex min-h-7 items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+                active
+                  ? 'border-accent/60 bg-accent/15 text-accent'
+                  : 'border-border bg-surface2 text-muted-foreground hover:text-foreground hover:border-accent/30',
+              )}
+            >
+              {TAG_LABEL[t]}
+            </button>
+          );
+        })}
+        <MultiselectDropdown
+          className="ml-auto"
+          noun="exercise"
+          options={availableExercises}
+          selected={selectedExercises}
+          onToggle={toggleExercise}
+        />
       </div>
-      <span className={`text-xs font-semibold ${trendColor}`}>
-        {trendLabel}
-      </span>
+
+      <SelectedPillChips
+        options={availableExercises}
+        selected={selectedExercises}
+        onToggle={toggleExercise}
+      />
+
+      {hasAnyOverall ? (
+        <>
+          <div className="-mx-1">
+            <DualSparkline primary={overall} accent={filtered} />
+          </div>
+          <div className="space-y-1 text-xs">
+            <div className="flex items-center gap-1.5">
+              <TrendIcon
+                dir={overallDir}
+                className={cn(
+                  overallDir === 'up'
+                    ? 'text-primary'
+                    : overallDir === 'down'
+                      ? 'text-destructive'
+                      : 'text-muted-foreground',
+                )}
+              />
+              <span className="text-muted-foreground">Overall this week:</span>
+              <strong className="text-foreground">
+                {formatValue(overallThis)}
+              </strong>
+            </div>
+            {filterActive && filtered && (
+              <div className="flex items-center gap-1.5 text-accent">
+                <TrendIcon dir={filteredDir} className="text-accent" />
+                <span>Filtered this week:</span>
+                <strong>{formatValue(filteredThis)}</strong>
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <p className="italic text-sm text-muted-foreground m-0 py-3">
+          Log some sessions to see your trend here.
+        </p>
+      )}
     </Card>
+  );
+}
+
+export function ProgressPanel({
+  programs,
+  instances,
+  library,
+  today,
+}: Props) {
+  return (
+    <div className="space-y-3">
+      <VolumeChart
+        title="Strength Volume"
+        category="strength"
+        tagOptions={WEIGHTLIFTING_TAGS}
+        programs={programs}
+        instances={instances}
+        library={library}
+        today={today}
+        formatValue={formatStrengthVolume}
+      />
+      <VolumeChart
+        title="Cardio Volume"
+        category="cardio"
+        tagOptions={CARDIO_TAGS}
+        programs={programs}
+        instances={instances}
+        library={library}
+        today={today}
+        formatValue={formatCardioVolume}
+      />
+    </div>
   );
 }

@@ -10,7 +10,14 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { Exercise, Instance, PlannedSet, Program } from './types';
+import type {
+  Exercise,
+  Instance,
+  LibraryExercise,
+  PlannedSet,
+  Program,
+  RestDay,
+} from './types';
 
 // Firestore layout:
 //   users/{uid}/programs/{programId}
@@ -28,8 +35,32 @@ function instancesCol(userId: string) {
   return collection(db, 'users', userId, 'instances');
 }
 
+function exercisesCol(userId: string) {
+  if (!db) throw new Error('Firestore is not configured.');
+  return collection(db, 'users', userId, 'exercises');
+}
+
+function restDaysCol(userId: string) {
+  if (!db) throw new Error('Firestore is not configured.');
+  return collection(db, 'users', userId, 'restDays');
+}
+
 export function uid(): string {
   return crypto.randomUUID();
+}
+
+// Wrap the legacy `{ days: [...] }` schedule shape into the discriminated
+// union we use today. Idempotent — already-migrated values pass through.
+function migrateSchedule(raw: unknown): Exercise['schedule'] {
+  const s = raw as { kind?: string; days?: unknown; period?: unknown; times?: unknown } | undefined;
+  if (s && (s.kind === 'weekly-days' || s.kind === 'frequency')) {
+    return s as Exercise['schedule'];
+  }
+  // Old shape was just { days: number[] } — promote to weekly-days.
+  return {
+    kind: 'weekly-days',
+    days: Array.isArray(s?.days) ? (s!.days as number[]) : [],
+  };
 }
 
 // Translate older program shapes to the current shape on read so imports of
@@ -37,10 +68,12 @@ export function uid(): string {
 function migrateExercise(raw: unknown): Exercise {
   const e = raw as Record<string, unknown>;
   if (Array.isArray(e.plannedSets)) {
-    if (e.trackingType !== 'weight' && e.trackingType !== 'time') {
-      return { ...(e as unknown as Exercise), trackingType: 'weight' };
+    const out = { ...(e as unknown as Exercise) };
+    if (out.trackingType !== 'weight' && out.trackingType !== 'time') {
+      out.trackingType = 'weight';
     }
-    return e as unknown as Exercise;
+    out.schedule = migrateSchedule(out.schedule);
+    return out;
   }
   const targetSets = Math.max(1, Number(e.targetSets) || 1);
   const targetReps = Math.max(1, Number(e.targetReps) || 1);
@@ -53,15 +86,37 @@ function migrateExercise(raw: unknown): Exercise {
   return {
     id: String(e.id),
     name: String(e.name ?? ''),
-    schedule: (e.schedule as Exercise['schedule']) ?? { days: [] },
+    schedule: migrateSchedule(e.schedule),
     trackingType: 'weight',
     plannedSets,
     goalWeight,
   };
 }
 
+// Wrap a legacy rollup goal (with `tag` directly) into the new
+// discriminated `target` shape. Idempotent.
+function migrateRollupGoal(raw: unknown): import('./types').RollupGoal {
+  const g = raw as Record<string, unknown>;
+  if (g.target && typeof g.target === 'object') {
+    return g as unknown as import('./types').RollupGoal;
+  }
+  return {
+    ...(g as unknown as import('./types').RollupGoal),
+    target: {
+      kind: 'tag',
+      tag: g.tag as import('./types').ExerciseTag,
+    },
+  };
+}
+
 function migrateProgram(p: Program): Program {
-  return { ...p, exercises: (p.exercises ?? []).map(migrateExercise) };
+  return {
+    ...p,
+    exercises: (p.exercises ?? []).map(migrateExercise),
+    rollupGoals: p.rollupGoals
+      ? p.rollupGoals.map(migrateRollupGoal)
+      : undefined,
+  };
 }
 
 // Firestore disallows `undefined`. Strip undefined fields recursively so we
@@ -93,12 +148,40 @@ export function subscribePrograms(
   });
 }
 
+// Mirror this program's nested exercise definitions into the persistent
+// library. Idempotent — repeating the same write is a no-op. Library entries
+// are intentionally never deleted by program writes: if you remove an
+// exercise from a program, its library entry stays so historical instances
+// can still resolve a name.
+async function syncProgramToLibrary(
+  userId: string,
+  program: Program,
+): Promise<void> {
+  if (!db || program.exercises.length === 0) return;
+  const batch = writeBatch(db);
+  for (const ex of program.exercises) {
+    batch.set(
+      doc(exercisesCol(userId), ex.id),
+      stripUndefined({
+        id: ex.id,
+        name: ex.name,
+        trackingType: ex.trackingType,
+        tags: ex.tags,
+        cardioActivity: ex.cardioActivity,
+        cardioUnit: ex.cardioUnit,
+      }),
+    );
+  }
+  await batch.commit();
+}
+
 export async function createProgram(
   userId: string,
   fields: Omit<Program, 'id' | 'createdAt'>,
 ): Promise<Program> {
   const program: Program = { ...fields, id: uid(), createdAt: Date.now() };
   await setDoc(doc(programsCol(userId), program.id), stripUndefined(program));
+  await syncProgramToLibrary(userId, program);
   return program;
 }
 
@@ -107,24 +190,18 @@ export async function updateProgram(
   program: Program,
 ): Promise<void> {
   await setDoc(doc(programsCol(userId), program.id), stripUndefined(program));
+  await syncProgramToLibrary(userId, program);
 }
 
 export async function deleteProgram(
   userId: string,
   programId: string,
 ): Promise<void> {
-  // Cascade: remove instances belonging to this program. Done in a batch so a
-  // partial failure doesn't orphan instances.
-  if (!db) throw new Error('Firestore is not configured.');
-  const instancesSnap = await getDocs(instancesCol(userId));
-  const batch = writeBatch(db);
-  batch.delete(doc(programsCol(userId), programId));
-  instancesSnap.docs.forEach((d) => {
-    if ((d.data() as Instance).programId === programId) {
-      batch.delete(d.ref);
-    }
-  });
-  await batch.commit();
+  // Programs are soft tags — deleting one only removes the program doc.
+  // Logged instances keep their (now-dangling) programId so progress carries
+  // over across program changes, and a new program with the same exercise
+  // name will pick up the historical data via name-based grouping.
+  await deleteDoc(doc(programsCol(userId), programId));
 }
 
 // --- Instances -----------------------------------------------------------
@@ -157,6 +234,86 @@ export async function updateInstance(
 
 export async function deleteInstance(userId: string, id: string): Promise<void> {
   await deleteDoc(doc(instancesCol(userId), id));
+}
+
+// --- Exercise library ----------------------------------------------------
+
+export function subscribeExerciseLibrary(
+  userId: string,
+  cb: (library: LibraryExercise[]) => void,
+): () => void {
+  const q = query(exercisesCol(userId), orderBy('name'));
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => d.data() as LibraryExercise));
+  });
+}
+
+// One-time backfill for users whose programs predate the library. Walks
+// existing programs and writes any exercise definitions that aren't in the
+// library yet. Idempotent — safe to call on every app load. Cheap when the
+// library is already up to date (a couple of reads, no writes).
+export async function backfillExerciseLibrary(userId: string): Promise<void> {
+  if (!db) throw new Error('Firestore is not configured.');
+  const [progSnap, libSnap] = await Promise.all([
+    getDocs(programsCol(userId)),
+    getDocs(exercisesCol(userId)),
+  ]);
+  const existingIds = new Set(libSnap.docs.map((d) => d.id));
+  const ops: { ref: ReturnType<typeof doc>; data: LibraryExercise }[] = [];
+  for (const progDoc of progSnap.docs) {
+    const program = progDoc.data() as Program;
+    for (const ex of program.exercises ?? []) {
+      if (existingIds.has(ex.id)) continue;
+      ops.push({
+        ref: doc(exercisesCol(userId), ex.id),
+        data: stripUndefined({
+          id: ex.id,
+          name: ex.name,
+          trackingType: ex.trackingType,
+          tags: ex.tags,
+          cardioActivity: ex.cardioActivity,
+          cardioUnit: ex.cardioUnit,
+        }) as LibraryExercise,
+      });
+      existingIds.add(ex.id);
+    }
+  }
+  if (ops.length === 0) return;
+  for (let i = 0; i < ops.length; i += 450) {
+    const batch = writeBatch(db);
+    for (const { ref, data } of ops.slice(i, i + 450)) {
+      batch.set(ref, data);
+    }
+    await batch.commit();
+  }
+}
+
+// --- Rest days -----------------------------------------------------------
+
+export function subscribeRestDays(
+  userId: string,
+  cb: (restDays: RestDay[]) => void,
+): () => void {
+  const q = query(restDaysCol(userId), orderBy('date', 'desc'));
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => d.data() as RestDay));
+  });
+}
+
+// Idempotent: the date string doubles as the doc id, so saving twice for the
+// same day overwrites rather than duplicating.
+export async function saveRestDay(
+  userId: string,
+  restDay: RestDay,
+): Promise<void> {
+  await setDoc(doc(restDaysCol(userId), restDay.date), stripUndefined(restDay));
+}
+
+export async function deleteRestDay(
+  userId: string,
+  date: string,
+): Promise<void> {
+  await deleteDoc(doc(restDaysCol(userId), date));
 }
 
 // --- Export / Import -----------------------------------------------------
