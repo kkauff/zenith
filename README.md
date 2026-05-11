@@ -42,6 +42,7 @@ Live at **<https://zenith-theta-puce.vercel.app/>**.
    tracking type). Set a schedule per exercise.
 
    <img src="docs/screenshots/edit-program.png" alt="Editing an exercise inside a program" width="420" />
+
 3. **Log from the home screen.** "Today" shows what's scheduled. Tap an
    exercise card to log sets, then save. You can also pick any
    catalog exercise ad-hoc from the home screen without attaching it
@@ -55,14 +56,13 @@ Live at **<https://zenith-theta-puce.vercel.app/>**.
    <img src="docs/screenshots/rest-day-1.png" alt="Take a rest day CTA below today's goals" width="500" />
 
    <img src="docs/screenshots/rest-day-2.png" alt="Rest day modal with reason chips and an optional note" width="420" />
+
 6. **Export / import** your data as JSON at any time via the data
    menu — useful for backups.
 
 ### How to request an account
 
-Zenith is invite-only right now. To request access, **reach out via my
-GitHub profile**: [@kkauff](https://github.com/kkauff) (open an issue
-on this repo, or use the contact info on my GitHub profile).
+Zenith is invite-only right now. To request access, **reach out to me**.
 
 Sign-in uses **Google authentication only**, so you'll need a valid
 Google / Gmail account. Once I approve you, I'll add your account to
@@ -147,7 +147,7 @@ behave more like tags than containers.
   scheduling.
 - **Rollup goals** per program: aggregate amount-over-time goals
   ("30 min of cardio M/W/F", "5 mi of running per week"). Matching
-  sessions from *any* program (or ad-hoc catalog logs) count toward
+  sessions from _any_ program (or ad-hoc catalog logs) count toward
   them.
 
 ### Exercises
@@ -229,7 +229,7 @@ Next features I'm planning to tackle:
 
 - **User-provided API keys for AI providers** so the app can offer
   AI-driven insights and workflows (training suggestions, weekly
-  recaps, plateau detection) using *your* key — no shared inference
+  recaps, plateau detection) using _your_ key — no shared inference
   costs.
 - **Strava integration** to auto-import cardio sessions.
 - **Garmin integration** — blocked on Garmin developer access being
@@ -279,7 +279,7 @@ is more than enough for personal use.
    and create a new project.
 2. **Enable Authentication:** Authentication → Get started →
    **Sign-in method** → enable **Google** → fill project public name
-   + support email → Save.
+   - support email → Save.
 3. **Enable Firestore:** Firestore Database → Create database →
    **production mode** → pick a nearby region.
 4. **Lock down access** — Firestore Database → **Rules**:
