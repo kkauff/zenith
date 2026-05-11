@@ -5,6 +5,7 @@ type Props<T extends string> = {
   onChange: (next: T) => void;
   options: { value: T; label: string }[];
   ariaLabel?: string;
+  className?: string;
 };
 
 // iOS-style segmented control: capsule with the active segment lifted by a
@@ -14,12 +15,16 @@ export function SegmentedToggle<T extends string>({
   onChange,
   options,
   ariaLabel,
+  className,
 }: Props<T>) {
   return (
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className="inline-flex items-center rounded-md border border-border bg-surface2 p-0.5 text-[11px] font-semibold"
+      className={cn(
+        'inline-flex items-center rounded-md border border-border bg-surface2 p-0.5 text-[11px] font-semibold',
+        className,
+      )}
     >
       {options.map((o) => {
         const active = o.value === value;

@@ -60,25 +60,8 @@ function adherenceOf(day: DayAdherence): number | null {
   return day.expected > 0 ? day.completed / day.expected : null;
 }
 
-function meanOfNonNull(values: (number | null)[]): number | null {
-  let sum = 0;
-  let count = 0;
-  for (const v of values) {
-    if (v === null) continue;
-    sum += v;
-    count += 1;
-  }
-  return count > 0 ? sum / count : null;
-}
-
 function formatPct(n: number | null): string {
   return n === null ? '—' : `${Math.round(n * 100)}%`;
-}
-
-function formatPp(n: number): string {
-  const v = Math.round(n);
-  if (v === 0) return '0pp';
-  return v > 0 ? `+${v}pp` : `${v}pp`;
 }
 
 export function AdherenceInsights({
@@ -90,18 +73,12 @@ export function AdherenceInsights({
   const [selectedCategories, setSelectedCategories] = useState<
     AdherenceCategory[]
   >([]);
-  const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([]);
   const [selectedPrograms, setSelectedPrograms] = useState<string[]>([]);
   const [tab, setTab] = useState<Tab>('over-time');
 
   const toggleCategory = (c: AdherenceCategory) => {
     setSelectedCategories((cur) =>
       cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c],
-    );
-  };
-  const toggleWeekday = (d: number) => {
-    setSelectedWeekdays((cur) =>
-      cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d],
     );
   };
   const toggleProgram = (id: string) => {
@@ -116,10 +93,10 @@ export function AdherenceInsights({
   const filter = useMemo(
     () => ({
       programIds: new Set(selectedPrograms),
-      weekdays: new Set(selectedWeekdays),
+      weekdays: new Set<number>(),
       categories: new Set(effectiveCategories),
     }),
-    [selectedPrograms, selectedWeekdays, effectiveCategories],
+    [selectedPrograms, effectiveCategories],
   );
 
   const programOptions = useMemo(
@@ -134,10 +111,6 @@ export function AdherenceInsights({
     ],
     [],
   );
-  const weekdayOptions = useMemo(
-    () => DAY_LABELS.map((name, idx) => ({ id: String(idx), name })),
-    [],
-  );
 
   // Unified pill list: every active filter renders as one removable pill
   // in a single wrapping row.
@@ -150,13 +123,6 @@ export function AdherenceInsights({
         onRemove: () => toggleCategory(c),
       });
     }
-    for (const w of selectedWeekdays) {
-      pills.push({
-        key: `wd:${w}`,
-        label: DAY_LABELS[w],
-        onRemove: () => toggleWeekday(w),
-      });
-    }
     for (const p of selectedPrograms) {
       const prog = programOptions.find((o) => o.id === p);
       pills.push({
@@ -166,12 +132,7 @@ export function AdherenceInsights({
       });
     }
     return pills;
-  }, [
-    selectedCategories,
-    selectedWeekdays,
-    selectedPrograms,
-    programOptions,
-  ]);
+  }, [selectedCategories, selectedPrograms, programOptions]);
 
   // --- Core data --------------------------------------------------------
 
@@ -242,45 +203,6 @@ export function AdherenceInsights({
     return sums.map((s, i) => (counts[i] > 0 ? s / counts[i] : null));
   }, [days]);
 
-  // --- Insights ---------------------------------------------------------
-
-  const bestWorst = useMemo(() => {
-    let bestIdx = -1;
-    let worstIdx = -1;
-    for (let i = 0; i < 7; i++) {
-      const v = weekdayAverages[i];
-      if (v === null) continue;
-      if (bestIdx === -1 || v > (weekdayAverages[bestIdx] ?? -Infinity)) {
-        bestIdx = i;
-      }
-      if (worstIdx === -1 || v < (weekdayAverages[worstIdx] ?? Infinity)) {
-        worstIdx = i;
-      }
-    }
-    if (bestIdx === -1) return null;
-    return {
-      best: { day: DAY_LABELS[bestIdx], pct: weekdayAverages[bestIdx]! },
-      worst: { day: DAY_LABELS[worstIdx], pct: weekdayAverages[worstIdx]! },
-    };
-  }, [weekdayAverages]);
-
-  // 30-day-vs-prior-30 trend. Uses the same filtered `days` array we
-  // already computed for the bottom 30 days of the range; for the prior
-  // 30 we use the slice before that. Range is 12 weeks = 84 days so we
-  // get a clean 30+30 with 24 days of context to spare.
-  const trend = useMemo(() => {
-    if (days.length < 60) return null;
-    const last30 = days.slice(-30);
-    const prior30 = days.slice(-60, -30);
-    const recent = meanOfNonNull(last30.map(adherenceOf));
-    const prior = meanOfNonNull(prior30.map(adherenceOf));
-    if (recent === null) return null;
-    return {
-      recent,
-      delta: prior === null ? null : (recent - prior) * 100,
-    };
-  }, [days]);
-
   // --- Time-of-day companion -------------------------------------------
 
   // For each calendar day in the range, find the earliest log time of any
@@ -320,21 +242,28 @@ export function AdherenceInsights({
         <MultiselectDropdown
           noun="category"
           nounPlural="categories"
+          placeholder="Category"
+          align="left"
           options={categoryOptions}
           selected={selectedCategories}
           onToggle={(id) => toggleCategory(id as AdherenceCategory)}
         />
         <MultiselectDropdown
-          noun="weekday"
-          options={weekdayOptions}
-          selected={selectedWeekdays.map(String)}
-          onToggle={(id) => toggleWeekday(Number(id))}
-        />
-        <MultiselectDropdown
           noun="program"
+          placeholder="Program"
+          align="left"
           options={programOptions}
           selected={selectedPrograms}
           onToggle={toggleProgram}
+        />
+        <SegmentedToggle
+          className="ml-auto"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'over-time', label: 'Trend' },
+            { value: 'weekday', label: 'Weekday' },
+          ]}
         />
       </div>
 
@@ -355,20 +284,6 @@ export function AdherenceInsights({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <div className="min-w-0 flex-1">
-          <Insights bestWorst={bestWorst} trend={trend} />
-        </div>
-        <SegmentedToggle
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'over-time', label: 'Over time' },
-            { value: 'weekday', label: 'Weekday' },
-          ]}
-        />
-      </div>
-
       <div>
         {tab === 'over-time' ? (
           <OverTimeChart
@@ -385,69 +300,6 @@ export function AdherenceInsights({
   );
 }
 
-
-function Insights({
-  bestWorst,
-  trend,
-}: {
-  bestWorst: {
-    best: { day: string; pct: number };
-    worst: { day: string; pct: number };
-  } | null;
-  trend: { recent: number; delta: number | null } | null;
-}) {
-  if (!bestWorst && !trend) {
-    return (
-      <p className="italic text-xs text-muted-foreground">
-        Log a few sessions to see your patterns.
-      </p>
-    );
-  }
-  return (
-    <p className="m-0 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-muted-foreground">
-      {bestWorst && (
-        <>
-          <span>
-            Best:{' '}
-            <strong className="text-foreground">
-              {bestWorst.best.day} ({formatPct(bestWorst.best.pct)})
-            </strong>
-          </span>
-          <span>
-            Worst:{' '}
-            <strong className="text-foreground">
-              {bestWorst.worst.day} ({formatPct(bestWorst.worst.pct)})
-            </strong>
-          </span>
-        </>
-      )}
-      {trend && (
-        <span>
-          Last 30:{' '}
-          <strong className="text-foreground">
-            {formatPct(trend.recent)}
-          </strong>
-          {trend.delta !== null && (
-            <>
-              {' '}
-              <span
-                className={cn(
-                  trend.delta > 0.5
-                    ? 'text-primary'
-                    : trend.delta < -0.5
-                      ? 'text-destructive'
-                      : 'text-muted-foreground',
-                )}
-              >
-                ({formatPp(trend.delta)})
-              </span>
-            </>
-          )}
-        </span>
-      )}
-    </p>
-  );
-}
 
 // Weekly trend line. SVG path across 12 points, y-axis ticks at 0/50/100%.
 // Padding is generous on all sides: left gutter for the % labels, top

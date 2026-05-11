@@ -17,6 +17,12 @@ type Props = {
   // — override for words like "category" → "categories".
   noun: string;
   nounPlural?: string;
+  // Overrides the empty-state trigger label ("Filter by {noun}" by default).
+  placeholder?: string;
+  // Which edge of the trigger the popup panel anchors to. Default 'right'
+  // (panel extends leftward — good for right-aligned triggers). Use 'left'
+  // for left-anchored triggers so the panel doesn't clip off-viewport.
+  align?: 'left' | 'right';
   className?: string;
 };
 
@@ -30,6 +36,8 @@ export function MultiselectDropdown({
   onToggle,
   noun,
   nounPlural,
+  placeholder,
+  align = 'right',
   className,
 }: Props) {
   const plural = nounPlural ?? `${noun}s`;
@@ -86,11 +94,16 @@ export function MultiselectDropdown({
       >
         {selected.length > 0
           ? `${selected.length} ${selected.length === 1 ? noun : plural} selected`
-          : `Filter by ${noun}`}
+          : (placeholder ?? `Filter by ${noun}`)}
         <ChevronDown aria-hidden className="size-3" />
       </button>
       {open && !disabled && (
-        <div className="absolute right-0 top-full mt-1 z-10 w-64 overflow-hidden rounded-lg border border-border/60 bg-card shadow-lg">
+        <div
+          className={cn(
+            'absolute top-full mt-1 z-10 w-64 overflow-hidden rounded-lg border border-border/60 bg-card shadow-lg',
+            align === 'left' ? 'left-0' : 'right-0',
+          )}
+        >
           <div className="flex items-center gap-2 border-b border-border/60 px-2">
             <Search aria-hidden className="size-3.5 text-muted-foreground" />
             <Input
