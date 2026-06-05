@@ -1,33 +1,28 @@
 import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import type { Exercise, Instance, InstanceSet } from '../types';
-import { parseDuration, splitDuration, unitLabel } from '../templates';
+import { parseDuration, splitDuration } from '../templates';
+import { useSettings } from '../settings';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 
 type Props = {
   exercise: Exercise;
-  // Called with parsed sets + notes when the user saves. Empty/invalid sets
-  // are dropped silently; if no usable sets remain we no-op.
+  // Invalid sets are dropped silently; an all-empty submit no-ops.
   onLog: (sets: InstanceSet[], notes: string) => void;
   saveLabel?: string;
-  // Skipped on the inline today cards where we don't need a notes field —
-  // the screen-style LogInstance keeps it.
   showNotes?: boolean;
-  // When provided, prefills the editor with this instance's sets/notes
-  // (i.e. "edit mode"). Otherwise we seed from the exercise's plannedSets.
+  // Provided when editing an existing instance; otherwise seeded from
+  // the exercise's plannedSets.
   initial?: Instance;
   onCancel?: () => void;
 };
 
-// One row's text-state across every tracking type. Only the fields relevant
-// to the current trackingType participate in submit; the rest are inert.
 type DraftSet = {
   weight: string;
   reps: string;
   min: string;
   sec: string;
-  distance: string;
 };
 
 const EMPTY_SET: DraftSet = {
@@ -35,7 +30,6 @@ const EMPTY_SET: DraftSet = {
   reps: '',
   min: '',
   sec: '',
-  distance: '',
 };
 
 function makeDraftFromPlanned(exercise: Exercise): DraftSet[] {
@@ -47,16 +41,6 @@ function makeDraftFromPlanned(exercise: Exercise): DraftSet[] {
       const d = s.durationSeconds ?? 0;
       const { min, sec } = splitDuration(d);
       return { ...EMPTY_SET, min: String(min), sec: String(sec) };
-    }
-    if (exercise.trackingType === 'cardio') {
-      const d = s.durationSeconds ?? 0;
-      const { min, sec } = splitDuration(d);
-      return {
-        ...EMPTY_SET,
-        distance: s.distance !== undefined ? String(s.distance) : '',
-        min: d > 0 ? String(min) : '',
-        sec: d > 0 ? String(sec) : '',
-      };
     }
     return {
       ...EMPTY_SET,
@@ -77,16 +61,6 @@ function makeDraftFromInstance(
       const { min, sec } = splitDuration(d);
       return { ...EMPTY_SET, min: String(min), sec: String(sec) };
     }
-    if (exercise.trackingType === 'cardio') {
-      const d = s.durationSeconds ?? 0;
-      const { min, sec } = splitDuration(d);
-      return {
-        ...EMPTY_SET,
-        distance: s.distance !== undefined ? String(s.distance) : '',
-        min: d > 0 ? String(min) : '',
-        sec: d > 0 ? String(sec) : '',
-      };
-    }
     return {
       ...EMPTY_SET,
       weight: s.weight !== undefined ? String(s.weight) : '',
@@ -103,6 +77,7 @@ export function SetEditor({
   initial,
   onCancel,
 }: Props) {
+  const { weightUnit } = useSettings();
   const [sets, setSets] = useState<DraftSet[]>(
     initial
       ? makeDraftFromInstance(exercise, initial)
@@ -110,10 +85,7 @@ export function SetEditor({
   );
   const [notes, setNotes] = useState(initial?.notes ?? '');
 
-  const tt = exercise.trackingType;
-  const isTime = tt === 'time';
-  const isCardio = tt === 'cardio';
-  const distanceUnit = exercise.cardioUnit ?? 'miles';
+  const isTime = exercise.trackingType === 'time';
 
   const updateSet = (i: number, patch: Partial<DraftSet>) => {
     setSets(sets.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
@@ -131,19 +103,7 @@ export function SetEditor({
   const submit = () => {
     const parsed: InstanceSet[] = [];
     for (const s of sets) {
-      if (isCardio) {
-        const distStr = s.distance.trim();
-        const distNum = distStr ? Number(distStr) : NaN;
-        const hasDist =
-          distStr !== '' && Number.isFinite(distNum) && distNum >= 0;
-        const dur = parseDuration(s.min, s.sec);
-        // Need at least one of distance / duration to count this row.
-        if (!hasDist && dur === null) continue;
-        const set: InstanceSet = {};
-        if (hasDist) set.distance = distNum;
-        if (dur !== null) set.durationSeconds = dur;
-        parsed.push(set);
-      } else if (isTime) {
+      if (isTime) {
         const d = parseDuration(s.min, s.sec);
         if (d === null) continue;
         parsed.push({ durationSeconds: d });
@@ -161,147 +121,81 @@ export function SetEditor({
     onLog(parsed, notes);
   };
 
-  // Cardio rows stack distance + time on two lines because three input
-  // fields per row would crush at mobile widths. Weight / time keep the
-  // existing 4-column grid.
   return (
     <>
       <div className="flex flex-col gap-2 my-2">
-        {!isCardio && (
+        <div
+          className="grid items-center gap-2 text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold"
+          style={{ gridTemplateColumns: '36px 1fr 1fr 36px' }}
+        >
+          <span className="text-center">Set</span>
+          {isTime ? (
+            <>
+              <span className="pl-1">Min</span>
+              <span className="pl-1">Sec</span>
+            </>
+          ) : (
+            <>
+              <span className="pl-1">Weight</span>
+              <span className="pl-1">Reps</span>
+            </>
+          )}
+          <span />
+        </div>
+        {sets.map((s, i) => (
           <div
-            className="grid items-center gap-2 text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold"
+            key={i}
+            className="grid items-center gap-2"
             style={{ gridTemplateColumns: '36px 1fr 1fr 36px' }}
           >
-            <span className="text-center">Set</span>
+            <span className="text-center text-muted-foreground font-semibold">
+              {i + 1}
+            </span>
             {isTime ? (
               <>
-                <span className="pl-1">Min</span>
-                <span className="pl-1">Sec</span>
+                <Input
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={s.min}
+                  onChange={(e) => updateSet(i, { min: e.target.value })}
+                  className="h-10 px-3 py-2"
+                />
+                <Input
+                  inputMode="numeric"
+                  placeholder="30"
+                  value={s.sec}
+                  onChange={(e) => updateSet(i, { sec: e.target.value })}
+                  className="h-10 px-3 py-2"
+                />
               </>
             ) : (
               <>
-                <span className="pl-1">Weight</span>
-                <span className="pl-1">Reps</span>
+                <Input
+                  placeholder={weightUnit}
+                  value={s.weight}
+                  onChange={(e) => updateSet(i, { weight: e.target.value })}
+                  className="h-10 px-3 py-2"
+                />
+                <Input
+                  inputMode="numeric"
+                  placeholder="reps"
+                  value={s.reps}
+                  onChange={(e) => updateSet(i, { reps: e.target.value })}
+                  className="h-10 px-3 py-2"
+                />
               </>
             )}
-            <span />
-          </div>
-        )}
-        {sets.map((s, i) => {
-          if (isCardio) {
-            return (
-              <div
-                key={i}
-                className="grid items-start gap-2"
-                style={{ gridTemplateColumns: '28px 1fr 28px' }}
-              >
-                <span className="pt-2 text-center text-muted-foreground font-semibold">
-                  {i + 1}
-                </span>
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2">
-                    <Input
-                      placeholder="0"
-                      inputMode="decimal"
-                      value={s.distance}
-                      onChange={(e) =>
-                        updateSet(i, { distance: e.target.value })
-                      }
-                      className="h-10 flex-1 px-3 py-2"
-                      aria-label="Distance"
-                    />
-                    <span className="w-10 text-xs text-muted-foreground">
-                      {unitLabel(distanceUnit)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      inputMode="numeric"
-                      placeholder="min"
-                      value={s.min}
-                      onChange={(e) => updateSet(i, { min: e.target.value })}
-                      className="h-10 flex-1 px-3 py-2"
-                      aria-label="Minutes"
-                    />
-                    <span className="text-muted-foreground">:</span>
-                    <Input
-                      inputMode="numeric"
-                      placeholder="sec"
-                      value={s.sec}
-                      onChange={(e) => updateSet(i, { sec: e.target.value })}
-                      className="h-10 flex-1 px-3 py-2"
-                      aria-label="Seconds"
-                    />
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="iconSm"
-                  aria-label={`Remove set ${i + 1}`}
-                  onClick={() => removeSet(i)}
-                  disabled={sets.length <= 1}
-                  className="mt-1"
-                >
-                  <X aria-hidden />
-                </Button>
-              </div>
-            );
-          }
-          return (
-            <div
-              key={i}
-              className="grid items-center gap-2"
-              style={{ gridTemplateColumns: '36px 1fr 1fr 36px' }}
+            <Button
+              variant="ghost"
+              size="iconSm"
+              aria-label={`Remove set ${i + 1}`}
+              onClick={() => removeSet(i)}
+              disabled={sets.length <= 1}
             >
-              <span className="text-center text-muted-foreground font-semibold">
-                {i + 1}
-              </span>
-              {isTime ? (
-                <>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={s.min}
-                    onChange={(e) => updateSet(i, { min: e.target.value })}
-                    className="h-10 px-3 py-2"
-                  />
-                  <Input
-                    inputMode="numeric"
-                    placeholder="30"
-                    value={s.sec}
-                    onChange={(e) => updateSet(i, { sec: e.target.value })}
-                    className="h-10 px-3 py-2"
-                  />
-                </>
-              ) : (
-                <>
-                  <Input
-                    placeholder="lb"
-                    value={s.weight}
-                    onChange={(e) => updateSet(i, { weight: e.target.value })}
-                    className="h-10 px-3 py-2"
-                  />
-                  <Input
-                    inputMode="numeric"
-                    placeholder="reps"
-                    value={s.reps}
-                    onChange={(e) => updateSet(i, { reps: e.target.value })}
-                    className="h-10 px-3 py-2"
-                  />
-                </>
-              )}
-              <Button
-                variant="ghost"
-                size="iconSm"
-                aria-label={`Remove set ${i + 1}`}
-                onClick={() => removeSet(i)}
-                disabled={sets.length <= 1}
-              >
-                <X aria-hidden />
-              </Button>
-            </div>
-          );
-        })}
+              <X aria-hidden />
+            </Button>
+          </div>
+        ))}
       </div>
       <Button variant="secondary" size="sm" onClick={addSet}>
         <Plus aria-hidden /> Add set

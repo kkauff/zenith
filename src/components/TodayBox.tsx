@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, Heart, Moon } from 'lucide-react';
-import type { Instance, Program, RestDay } from '../types';
+import type { Instance, Program, Reschedule, RestDay } from '../types';
 import { dayName, exercisesForDay, instancesOnDay, restDayFor } from '../today';
 import { Button } from './ui/button';
 
@@ -13,11 +13,11 @@ type Props = {
   programs: Program[];
   instances: Instance[];
   restDays: RestDay[];
+  reschedules: Reschedule[];
   today: Date;
   expanded: boolean;
   onToggle: () => void;
-  // Rest-day actions — only consulted when today is a rest day. Inline in
-  // the same panel so we don't render a second redundant card below.
+  // Only consulted when today is a rest day.
   onEditRestDay: () => void;
   onResumeTraining: () => void;
 };
@@ -26,16 +26,15 @@ export function TodayBox({
   programs,
   instances,
   restDays,
+  reschedules,
   today,
   expanded,
   onToggle,
   onEditRestDay,
   onResumeTraining,
 }: Props) {
-  const scheduled = exercisesForDay(programs, today);
+  const scheduled = exercisesForDay(programs, today, reschedules);
   const todays = instancesOnDay(instances, today);
-  // An exercise counts as "done today" if any instance for it was logged
-  // today. Multiple instances of the same exercise still count once.
   const doneIds = new Set(todays.map((i) => i.exerciseId));
   const done = scheduled.filter((s) => doneIds.has(s.exercise.id)).length;
   const total = scheduled.length;
@@ -43,9 +42,6 @@ export function TodayBox({
 
   const Chevron = expanded ? ChevronDown : ChevronRight;
 
-  // Rest day overrides everything else. Yellow theme, single panel: the
-  // headline tap-target toggles open to reveal notes + edit/resume actions
-  // so we don't duplicate the headline in a second card below.
   if (restDay) {
     return (
       <section className="overflow-hidden rounded-lg border border-rest/60 bg-rest/10 shadow-glow-rest transition-all hover:border-rest/80">
@@ -116,7 +112,7 @@ export function TodayBox({
             {dayName(today)}
           </div>
           <div className="text-xs text-muted-foreground">
-            Nothing scheduled — rest day.
+            Nothing scheduled — rest or do another day's lift.
           </div>
         </div>
         <Chevron
@@ -127,7 +123,6 @@ export function TodayBox({
     );
   }
 
-  // First 3 names, then "+N more" if longer.
   const previewNames = scheduled.slice(0, 3).map((s) => s.exercise.name);
   const more = scheduled.length - previewNames.length;
 

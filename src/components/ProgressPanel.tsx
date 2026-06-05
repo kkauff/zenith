@@ -6,7 +6,7 @@ import type {
   LibraryExercise,
   Program,
 } from '../types';
-import { CARDIO_TAGS, TAG_LABEL, WEIGHTLIFTING_TAGS } from '../types';
+import { TAG_LABEL, WEIGHTLIFTING_TAGS } from '../types';
 import {
   resolveExerciseName,
   resolveExerciseTags,
@@ -29,40 +29,24 @@ type Props = {
 const BUCKETS = 8; // weekly buckets shown on each chart
 const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
 
-type Category = 'strength' | 'cardio';
-
-// Per-instance contribution to the weekly volume bucket.
-//   Strength: weighted sets add weight × reps (lb-reps); time-held sets
-//             (planks etc.) add durationSeconds directly. Same axis, no
-//             unit conversion — a heavy lift naturally dwarfs a hold, which
-//             tracks how the work actually compares.
-//   Cardio:   total durationSeconds across sets. Universal across activities
-//             — running miles vs swimming yards can't add together cleanly,
-//             but minutes always can.
+// Weighted sets add weight × reps; time-held sets add durationSeconds.
+// Same axis, no unit conversion — a heavy lift naturally dominates a
+// hold, matching how the work compares in practice.
 function instanceVolume(
   inst: Instance,
-  category: Category,
   programs: Program[],
   library: LibraryExercise[],
 ): number {
   const tt = resolveTrackingType(inst, programs, library);
-  if (category === 'strength') {
-    if (tt !== 'weight' && tt !== 'time') return 0;
-    let total = 0;
-    for (const s of inst.sets) {
-      if (s.weight !== undefined && s.reps !== undefined) {
-        total += s.weight * s.reps;
-      }
-      if (s.durationSeconds !== undefined) {
-        total += s.durationSeconds;
-      }
-    }
-    return total;
-  }
-  if (tt !== 'cardio') return 0;
+  if (tt !== 'weight' && tt !== 'time') return 0;
   let total = 0;
   for (const s of inst.sets) {
-    if (s.durationSeconds !== undefined) total += s.durationSeconds;
+    if (s.weight !== undefined && s.reps !== undefined) {
+      total += s.weight * s.reps;
+    }
+    if (s.durationSeconds !== undefined) {
+      total += s.durationSeconds;
+    }
   }
   return total;
 }
@@ -72,7 +56,6 @@ function buildWeeklyVolume(
   programs: Program[],
   library: LibraryExercise[],
   today: Date,
-  category: Category,
   filter?: (inst: Instance) => boolean,
 ): number[] {
   const endMs = today.getTime();
@@ -85,7 +68,7 @@ function buildWeeklyVolume(
       BUCKETS - 1,
       Math.floor((inst.loggedAt - startMs) / MS_PER_WEEK),
     );
-    series[idx] += instanceVolume(inst, category, programs, library);
+    series[idx] += instanceVolume(inst, programs, library);
   }
   return series;
 }
@@ -94,18 +77,8 @@ function formatStrengthVolume(n: number): string {
   return Math.round(n).toLocaleString();
 }
 
-function formatCardioVolume(seconds: number): string {
-  if (seconds <= 0) return '0';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0 && m > 0) return `${h}h ${m}m`;
-  if (h > 0) return `${h}h`;
-  return `${m} min`;
-}
-
-// Two-line sparkline. Primary line always renders; accent line renders on
-// top when filter is active. Both share the same y-scale (min anchored at
-// 0, max = max across both series) so the lines are directly comparable.
+// Both series share the same y-scale (anchored at 0, max = max of both)
+// so the filtered line is directly comparable to the overall line.
 function DualSparkline({
   primary,
   accent,
@@ -202,7 +175,6 @@ function TrendIcon({
 
 function VolumeChart({
   title,
-  category,
   tagOptions,
   programs,
   instances,
@@ -211,7 +183,6 @@ function VolumeChart({
   formatValue,
 }: {
   title: string;
-  category: Category;
   tagOptions: readonly ExerciseTag[];
   programs: Program[];
   instances: Instance[];
@@ -222,9 +193,6 @@ function VolumeChart({
   const [selectedTags, setSelectedTags] = useState<ExerciseTag[]>([]);
   const [selectedExercises, setSelectedExercises] = useState<string[]>([]);
 
-  // Available exercise chips — anything in the chart's category that's been
-  // logged in the last BUCKETS weeks. Keeps the filter list relevant and
-  // short.
   const availableExercises = useMemo(() => {
     const cutoff = today.getTime() - BUCKETS * MS_PER_WEEK;
     const seen = new Set<string>();
@@ -232,19 +200,18 @@ function VolumeChart({
     for (const inst of instances) {
       if (inst.loggedAt < cutoff) continue;
       const tt = resolveTrackingType(inst, programs, library);
-      if (category === 'strength' && tt !== 'weight' && tt !== 'time') continue;
-      if (category === 'cardio' && tt !== 'cardio') continue;
+      if (tt !== 'weight' && tt !== 'time') continue;
       if (seen.has(inst.exerciseId)) continue;
       seen.add(inst.exerciseId);
       const name = resolveExerciseName(inst, programs, library);
       if (name) out.push({ id: inst.exerciseId, name });
     }
     return out.sort((a, b) => a.name.localeCompare(b.name));
-  }, [instances, programs, library, today, category]);
+  }, [instances, programs, library, today]);
 
   const overall = useMemo(
-    () => buildWeeklyVolume(instances, programs, library, today, category),
-    [instances, programs, library, today, category],
+    () => buildWeeklyVolume(instances, programs, library, today),
+    [instances, programs, library, today],
   );
 
   const filterActive =
@@ -259,7 +226,6 @@ function VolumeChart({
       programs,
       library,
       today,
-      category,
       (inst) => {
         if (exSet.has(inst.exerciseId)) return true;
         if (tagSet.size === 0) return false;
@@ -275,7 +241,6 @@ function VolumeChart({
     programs,
     library,
     today,
-    category,
   ]);
 
   const toggleTag = (t: ExerciseTag) => {
@@ -375,6 +340,17 @@ function VolumeChart({
                 <strong>{formatValue(filteredThis)}</strong>
               </div>
             )}
+            {filterActive &&
+              filtered &&
+              filtered.every((v) => v === 0) &&
+              selectedTags.length > 0 && (
+                <p className="m-0 mt-2 text-[11px] text-muted-foreground italic">
+                  No logged exercises match these tags. Check each
+                  exercise's tag chips on its program page — the tag has to
+                  be saved on the exercise itself, not inferred from the
+                  name.
+                </p>
+              )}
           </div>
         </>
       ) : (
@@ -396,23 +372,12 @@ export function ProgressPanel({
     <div className="space-y-3">
       <VolumeChart
         title="Strength Volume"
-        category="strength"
         tagOptions={WEIGHTLIFTING_TAGS}
         programs={programs}
         instances={instances}
         library={library}
         today={today}
         formatValue={formatStrengthVolume}
-      />
-      <VolumeChart
-        title="Cardio Volume"
-        category="cardio"
-        tagOptions={CARDIO_TAGS}
-        programs={programs}
-        instances={instances}
-        library={library}
-        today={today}
-        formatValue={formatCardioVolume}
       />
     </div>
   );

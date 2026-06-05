@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
-import type { Instance, Program, RestDay } from '../types';
+import type { Instance, Program, Reschedule, RestDay } from '../types';
 import {
-  type AdherenceCategory,
   type DayAdherence,
   dailyAdherence,
   instanceMatchesFilter,
@@ -32,6 +31,7 @@ type Props = {
   programs: Program[];
   instances: Instance[];
   restDays: RestDay[];
+  reschedules: Reschedule[];
   today: Date;
 };
 
@@ -68,35 +68,24 @@ export function AdherenceInsights({
   programs,
   instances,
   restDays,
+  reschedules,
   today,
 }: Props) {
-  const [selectedCategories, setSelectedCategories] = useState<
-    AdherenceCategory[]
-  >([]);
   const [selectedPrograms, setSelectedPrograms] = useState<string[]>([]);
   const [tab, setTab] = useState<Tab>('over-time');
 
-  const toggleCategory = (c: AdherenceCategory) => {
-    setSelectedCategories((cur) =>
-      cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c],
-    );
-  };
   const toggleProgram = (id: string) => {
     setSelectedPrograms((cur) =>
       cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
     );
   };
 
-  // Both categories selected = same as neither = no category filter.
-  const effectiveCategories =
-    selectedCategories.length === 2 ? [] : selectedCategories;
   const filter = useMemo(
     () => ({
       programIds: new Set(selectedPrograms),
       weekdays: new Set<number>(),
-      categories: new Set(effectiveCategories),
     }),
-    [selectedPrograms, effectiveCategories],
+    [selectedPrograms],
   );
 
   const programOptions = useMemo(
@@ -104,25 +93,8 @@ export function AdherenceInsights({
     [programs],
   );
 
-  const categoryOptions = useMemo(
-    () => [
-      { id: 'cardio', name: 'Cardio' },
-      { id: 'strength', name: 'Strength' },
-    ],
-    [],
-  );
-
-  // Unified pill list: every active filter renders as one removable pill
-  // in a single wrapping row.
   const activePills = useMemo(() => {
     const pills: { key: string; label: string; onRemove: () => void }[] = [];
-    for (const c of selectedCategories) {
-      pills.push({
-        key: `cat:${c}`,
-        label: c === 'cardio' ? 'Cardio' : 'Strength',
-        onRemove: () => toggleCategory(c),
-      });
-    }
     for (const p of selectedPrograms) {
       const prog = programOptions.find((o) => o.id === p);
       pills.push({
@@ -132,18 +104,26 @@ export function AdherenceInsights({
       });
     }
     return pills;
-  }, [selectedCategories, selectedPrograms, programOptions]);
+  }, [selectedPrograms, programOptions]);
 
   // --- Core data --------------------------------------------------------
 
   const days = useMemo(() => {
     const start = startOfRange(today);
-    return dailyAdherence(programs, instances, restDays, start, today, filter);
-  }, [programs, instances, restDays, today, filter]);
+    const activePrograms = programs.filter((p) => p.active);
+    return dailyAdherence(
+      activePrograms,
+      instances,
+      restDays,
+      start,
+      today,
+      filter,
+      reschedules,
+    );
+  }, [programs, instances, restDays, reschedules, today, filter]);
 
-  // Rest-day dates inside the visible range, expressed as "days offset from
-  // range start" so the over-time chart can position yellow ticks on its
-  // x-axis without re-computing the time scale.
+  // Rest-day positions expressed as "days from range start" so the chart
+  // can plot ticks without re-deriving the time scale.
   const restDayOffsets = useMemo(() => {
     const start = startOfRange(today);
     const startMs = start.getTime();
@@ -159,15 +139,12 @@ export function AdherenceInsights({
     return out;
   }, [restDays, today]);
 
-  // Weekly aggregate for the "Over time" tab: 12 buckets, each summing
-  // expected/completed across 7 days. Smoother than daily and aligns
-  // naturally with x-axis week labels.
+  // 12 weekly buckets; smoother than daily and aligns with x-axis labels.
   const weeklySeries = useMemo(() => {
     const start = startOfRange(today);
     const buckets = Array.from({ length: WEEKS }, () => ({
       expected: 0,
       completed: 0,
-      // Midpoint date for axis labeling.
       midDate: new Date(0),
     }));
     for (const d of days) {
@@ -188,8 +165,6 @@ export function AdherenceInsights({
     }));
   }, [days, today]);
 
-  // Average adherence per weekday across the 12-week range. Used by the
-  // Weekday tab AND the "best/worst day" insight.
   const weekdayAverages = useMemo(() => {
     const sums = new Array<number>(7).fill(0);
     const counts = new Array<number>(7).fill(0);
@@ -205,21 +180,20 @@ export function AdherenceInsights({
 
   // --- Time-of-day companion -------------------------------------------
 
-  // For each calendar day in the range, find the earliest log time of any
-  // instance that matches the filter. Bin by hour bucket. Days with no
-  // matching log contribute nothing (honest: missed days have no time).
+  // Per day in range, pick the earliest matching log time and bin it.
+  // Days with no matching log contribute nothing — missed days have no
+  // time-of-day signal.
   const timeOfDayCounts = useMemo(() => {
     const counts = new Array<number>(TIME_BUCKETS.length).fill(0);
     const start = startOfRange(today);
     const end = new Date(today);
     end.setHours(0, 0, 0, 0);
     end.setDate(end.getDate() + 1);
-    // Pre-bucket matching instances by yyyy-mm-dd.
     const earliestByDay = new Map<string, number>();
     for (const inst of instances) {
       if (inst.loggedAt < start.getTime() || inst.loggedAt >= end.getTime())
         continue;
-      if (!instanceMatchesFilter(inst, programs, filter)) continue;
+      if (!instanceMatchesFilter(inst, filter)) continue;
       const d = new Date(inst.loggedAt);
       const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
       const prior = earliestByDay.get(key);
@@ -239,15 +213,6 @@ export function AdherenceInsights({
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-1.5">
-        <MultiselectDropdown
-          noun="category"
-          nounPlural="categories"
-          placeholder="Category"
-          align="left"
-          options={categoryOptions}
-          selected={selectedCategories}
-          onToggle={(id) => toggleCategory(id as AdherenceCategory)}
-        />
         <MultiselectDropdown
           noun="program"
           placeholder="Program"

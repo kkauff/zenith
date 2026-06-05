@@ -1,17 +1,17 @@
-// Helpers for working with logged instances across programs.
-//
-// Programs are tags rather than containers, so an instance might outlive the
-// program it was logged under (dangling `programId`) or its source exercise
-// (the exercise was removed from the program). Resolution order:
-//   1. `inst.exerciseName` — denormalized at log time on newer instances.
-//   2. The program's nested exercise (if the program still exists).
-//   3. The persistent exercise library — survives program deletion, so
-//      orphan instances logged after the library was introduced still
-//      resolve to a real name.
-//   4. null → caller decides on an "Unknown exercise" fallback.
+// An instance can outlive the program it was logged under (dangling
+// programId) or its source exercise. Resolution walks:
+//   1. denormalized `inst.exerciseName`
+//   2. the program's nested exercise (if the program still exists)
+//   3. the persistent library mirror (survives program deletion)
+//   4. global catalog by slug / name / fuzzy match
 
-import { findGlobalByName, GLOBAL_EXERCISES } from './exercise-library';
+import {
+  findGlobalByName,
+  GLOBAL_EXERCISES,
+  suggestExercises,
+} from './exercise-library';
 import type {
+  Exercise,
   ExerciseTag,
   Instance,
   LibraryExercise,
@@ -43,7 +43,7 @@ export function resolveTrackingType(
   if (ex) return ex.trackingType;
   const libEx = library.find((e) => e.id === inst.exerciseId);
   if (libEx) return libEx.trackingType;
-  // Fully orphaned instance with no library record — infer from set shape.
+  // Fully orphaned — infer from the set shape.
   for (const s of inst.sets) {
     if (s.durationSeconds !== undefined) return 'time';
     if (s.weight !== undefined && s.reps !== undefined) return 'weight';
@@ -51,12 +51,16 @@ export function resolveTrackingType(
   return 'weight';
 }
 
-// Resolve an instance's exercise tags by walking program → library → global
-// catalog. Three catalog matches in order of precision: by slug (ad-hoc
-// logs from the home picker), by program/library exercise name, and by
-// the denormalized `inst.exerciseName`. The name fallbacks recover tags
-// for custom program exercises whose name happens to match a catalog item
-// (e.g. a user-built program with "Plank" — same name, different id).
+// Exact alias match first, then a fuzzy fallback at the same threshold as
+// the "Did you mean…" suggester so "Calf Raises" matches "Calf Raise" and
+// "Overhead Dumbbell Press" matches "Overhead Press".
+function catalogTagsFor(name: string): ExerciseTag[] | null {
+  const exact = findGlobalByName(name);
+  if (exact) return exact.tags;
+  const [top] = suggestExercises(name, 1);
+  return top ? top.tags : null;
+}
+
 export function resolveExerciseTags(
   inst: Instance,
   programs: Program[],
@@ -71,8 +75,16 @@ export function resolveExerciseTags(
   if (bySlug) return bySlug.tags;
   const name = inst.exerciseName ?? ex?.name ?? lib?.name;
   if (name) {
-    const byName = findGlobalByName(name);
-    if (byName) return byName.tags;
+    const fromCatalog = catalogTagsFor(name);
+    if (fromCatalog) return fromCatalog;
   }
   return [];
+}
+
+// Catalog-backed inference when the user hasn't explicitly set any tags.
+// Mirrors `resolveExerciseTags` so the chips on a row match what the chart
+// filter resolves to.
+export function effectiveExerciseTags(ex: Exercise): ExerciseTag[] {
+  if (ex.tags && ex.tags.length > 0) return ex.tags;
+  return catalogTagsFor(ex.name) ?? [];
 }

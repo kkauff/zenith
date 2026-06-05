@@ -1,5 +1,6 @@
-import type { Instance, Program, RestDay } from "../types";
+import type { Instance, Program, Reschedule, RestDay } from "../types";
 import { adherenceMonth, adherenceToday, adherenceWeek } from "../today";
+import { useSettings } from "../settings";
 import { AdherenceInsights } from "./AdherenceInsights";
 import { ProgressRing } from "./ProgressRing";
 import { Card, CardTitle } from "./ui/card";
@@ -8,6 +9,7 @@ type Props = {
   programs: Program[];
   instances: Instance[];
   restDays: RestDay[];
+  reschedules: Reschedule[];
   today: Date;
 };
 
@@ -15,11 +17,35 @@ export function AdherenceRings({
   programs,
   instances,
   restDays,
+  reschedules,
   today,
 }: Props) {
-  const day = adherenceToday(programs, instances, restDays, today);
-  const week = adherenceWeek(programs, instances, restDays, today);
-  const month = adherenceMonth(programs, instances, restDays, today);
+  // Adherence reflects "what I'm currently planning to do" — inactive
+  // (shelved) programs shouldn't count expected work toward the ring.
+  const activePrograms = programs.filter((p) => p.active);
+  const { weekStartDay } = useSettings();
+  const day = adherenceToday(
+    activePrograms,
+    instances,
+    restDays,
+    today,
+    reschedules,
+  );
+  const week = adherenceWeek(
+    activePrograms,
+    instances,
+    restDays,
+    today,
+    reschedules,
+    weekStartDay,
+  );
+  const month = adherenceMonth(
+    activePrograms,
+    instances,
+    restDays,
+    today,
+    reschedules,
+  );
 
   return (
     <Card className="flex flex-col gap-4">
@@ -36,6 +62,7 @@ export function AdherenceRings({
           programs={programs}
           instances={instances}
           restDays={restDays}
+          reschedules={reschedules}
           today={today}
         />
       </div>

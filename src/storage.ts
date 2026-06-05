@@ -16,14 +16,14 @@ import type {
   LibraryExercise,
   PlannedSet,
   Program,
+  Reschedule,
   RestDay,
+  UserSettings,
 } from './types';
+import { DEFAULT_SETTINGS } from './types';
 
-// Firestore layout:
-//   users/{uid}/programs/{programId}
-//   users/{uid}/instances/{instanceId}
-// `uid` is the Firebase Auth UID (passed in as `userId` to keep the storage
-// API caller-agnostic — the auth layer chooses what string to use).
+// `userId` is the Firebase Auth UID — passed in rather than read from
+// auth state so the storage API stays caller-agnostic.
 
 function programsCol(userId: string) {
   if (!db) throw new Error('Firestore is not configured.');
@@ -45,29 +45,39 @@ function restDaysCol(userId: string) {
   return collection(db, 'users', userId, 'restDays');
 }
 
+function reschedulesCol(userId: string) {
+  if (!db) throw new Error('Firestore is not configured.');
+  return collection(db, 'users', userId, 'reschedules');
+}
+
+function settingsDoc(userId: string) {
+  if (!db) throw new Error('Firestore is not configured.');
+  return doc(db, 'users', userId, 'settings', 'preferences');
+}
+
 export function uid(): string {
   return crypto.randomUUID();
 }
 
-// Wrap the legacy `{ days: [...] }` schedule shape into the discriminated
-// union we use today. Idempotent — already-migrated values pass through.
+// Promotes the legacy `{ days: [...] }` shape into the discriminated union.
+// Idempotent.
 function migrateSchedule(raw: unknown): Exercise['schedule'] {
   const s = raw as { kind?: string; days?: unknown; period?: unknown; times?: unknown } | undefined;
   if (s && (s.kind === 'weekly-days' || s.kind === 'frequency')) {
     return s as Exercise['schedule'];
   }
-  // Old shape was just { days: number[] } — promote to weekly-days.
   return {
     kind: 'weekly-days',
     days: Array.isArray(s?.days) ? (s!.days as number[]) : [],
   };
 }
 
-// Translate older program shapes to the current shape on read so imports of
-// older exports still work.
-function migrateExercise(raw: unknown): Exercise {
+// Returns null for exercises that no longer fit the current model (legacy
+// cardio entries). Caller filters those out at load time.
+function migrateExercise(raw: unknown): Exercise | null {
   const e = raw as Record<string, unknown>;
   if (Array.isArray(e.plannedSets)) {
+    if (e.trackingType === 'cardio') return null;
     const out = { ...(e as unknown as Exercise) };
     if (out.trackingType !== 'weight' && out.trackingType !== 'time') {
       out.trackingType = 'weight';
@@ -93,35 +103,25 @@ function migrateExercise(raw: unknown): Exercise {
   };
 }
 
-// Wrap a legacy rollup goal (with `tag` directly) into the new
-// discriminated `target` shape. Idempotent.
-function migrateRollupGoal(raw: unknown): import('./types').RollupGoal {
-  const g = raw as Record<string, unknown>;
-  if (g.target && typeof g.target === 'object') {
-    return g as unknown as import('./types').RollupGoal;
-  }
-  return {
-    ...(g as unknown as import('./types').RollupGoal),
-    target: {
-      kind: 'tag',
-      tag: g.tag as import('./types').ExerciseTag,
-    },
-  };
-}
-
 function migrateProgram(p: Program): Program {
+  // Drop the legacy `rollupGoals` field if it still exists in Firestore.
+  // Pre-`active` programs default to active so we don't silently disable
+  // anyone's daily plan on load.
+  const { rollupGoals: _legacy, ...rest } = p as Program & {
+    rollupGoals?: unknown;
+  };
   return {
-    ...p,
-    exercises: (p.exercises ?? []).map(migrateExercise),
-    rollupGoals: p.rollupGoals
-      ? p.rollupGoals.map(migrateRollupGoal)
-      : undefined,
+    ...rest,
+    active: typeof rest.active === 'boolean' ? rest.active : true,
+    exercises: (rest.exercises ?? [])
+      .map(migrateExercise)
+      .filter((e): e is Exercise => e !== null),
   };
 }
 
-// Firestore disallows `undefined`. Strip undefined fields recursively so we
-// can pass through user-shaped objects (Exercise, PlannedSet, …) that may
-// legitimately omit optional values.
+// Firestore disallows `undefined`, so recursively strip those fields
+// before writing. Optional fields on our types may legitimately omit
+// values.
 function stripUndefined<T>(value: T): T {
   if (Array.isArray(value)) {
     return value.map((v) => stripUndefined(v)) as unknown as T;
@@ -148,11 +148,9 @@ export function subscribePrograms(
   });
 }
 
-// Mirror this program's nested exercise definitions into the persistent
-// library. Idempotent — repeating the same write is a no-op. Library entries
-// are intentionally never deleted by program writes: if you remove an
-// exercise from a program, its library entry stays so historical instances
-// can still resolve a name.
+// Library entries are never deleted by program writes — removing an
+// exercise from a program leaves its library entry intact so historical
+// instances can still resolve their name and tags.
 async function syncProgramToLibrary(
   userId: string,
   program: Program,
@@ -167,8 +165,6 @@ async function syncProgramToLibrary(
         name: ex.name,
         trackingType: ex.trackingType,
         tags: ex.tags,
-        cardioActivity: ex.cardioActivity,
-        cardioUnit: ex.cardioUnit,
       }),
     );
   }
@@ -193,14 +189,13 @@ export async function updateProgram(
   await syncProgramToLibrary(userId, program);
 }
 
+// Removes only the program doc. Instances keep their dangling programId
+// so progress survives across program changes and new programs with the
+// same exercise name pick up historical data via name-based grouping.
 export async function deleteProgram(
   userId: string,
   programId: string,
 ): Promise<void> {
-  // Programs are soft tags — deleting one only removes the program doc.
-  // Logged instances keep their (now-dangling) programId so progress carries
-  // over across program changes, and a new program with the same exercise
-  // name will pick up the historical data via name-based grouping.
   await deleteDoc(doc(programsCol(userId), programId));
 }
 
@@ -212,7 +207,13 @@ export function subscribeInstances(
 ): () => void {
   const q = query(instancesCol(userId), orderBy('loggedAt', 'desc'));
   return onSnapshot(q, (snap) => {
-    cb(snap.docs.map((d) => d.data() as Instance));
+    // Legacy cardio logs still exist in Firestore for some accounts;
+    // skip them so the UI never tries to render the old shape.
+    cb(
+      snap.docs
+        .map((d) => d.data() as Record<string, unknown>)
+        .filter((i) => i.trackingType !== 'cardio') as Instance[],
+    );
   });
 }
 
@@ -244,14 +245,16 @@ export function subscribeExerciseLibrary(
 ): () => void {
   const q = query(exercisesCol(userId), orderBy('name'));
   return onSnapshot(q, (snap) => {
-    cb(snap.docs.map((d) => d.data() as LibraryExercise));
+    cb(
+      snap.docs
+        .map((d) => d.data() as Record<string, unknown>)
+        .filter((e) => e.trackingType !== 'cardio') as LibraryExercise[],
+    );
   });
 }
 
-// One-time backfill for users whose programs predate the library. Walks
-// existing programs and writes any exercise definitions that aren't in the
-// library yet. Idempotent — safe to call on every app load. Cheap when the
-// library is already up to date (a couple of reads, no writes).
+// Idempotent — safe to call on every app load. Cheap when the library
+// is already in sync (two reads, zero writes).
 export async function backfillExerciseLibrary(userId: string): Promise<void> {
   if (!db) throw new Error('Firestore is not configured.');
   const [progSnap, libSnap] = await Promise.all([
@@ -271,8 +274,6 @@ export async function backfillExerciseLibrary(userId: string): Promise<void> {
           name: ex.name,
           trackingType: ex.trackingType,
           tags: ex.tags,
-          cardioActivity: ex.cardioActivity,
-          cardioUnit: ex.cardioUnit,
         }) as LibraryExercise,
       });
       existingIds.add(ex.id);
@@ -300,8 +301,6 @@ export function subscribeRestDays(
   });
 }
 
-// Idempotent: the date string doubles as the doc id, so saving twice for the
-// same day overwrites rather than duplicating.
 export async function saveRestDay(
   userId: string,
   restDay: RestDay,
@@ -314,6 +313,67 @@ export async function deleteRestDay(
   date: string,
 ): Promise<void> {
   await deleteDoc(doc(restDaysCol(userId), date));
+}
+
+// --- Reschedules ---------------------------------------------------------
+
+export function subscribeReschedules(
+  userId: string,
+  cb: (reschedules: Reschedule[]) => void,
+): () => void {
+  const q = query(reschedulesCol(userId), orderBy('fromDate', 'desc'));
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => d.data() as Reschedule));
+  });
+}
+
+export async function saveReschedule(
+  userId: string,
+  reschedule: Reschedule,
+): Promise<void> {
+  await setDoc(
+    doc(reschedulesCol(userId), reschedule.fromDate),
+    stripUndefined(reschedule),
+  );
+}
+
+export async function deleteReschedule(
+  userId: string,
+  fromDate: string,
+): Promise<void> {
+  await deleteDoc(doc(reschedulesCol(userId), fromDate));
+}
+
+// --- Settings ------------------------------------------------------------
+
+// Missing doc and missing fields both fall through to DEFAULT_SETTINGS so
+// a fresh account works without ever writing here.
+export function subscribeSettings(
+  userId: string,
+  cb: (settings: UserSettings) => void,
+): () => void {
+  return onSnapshot(settingsDoc(userId), (snap) => {
+    const raw = (snap.data() ?? {}) as Partial<UserSettings>;
+    const wsd = raw.weekStartDay;
+    const validWeekStart =
+      typeof wsd === 'number' && wsd >= 0 && wsd <= 6 && Number.isInteger(wsd);
+    cb({
+      weekStartDay: validWeekStart
+        ? (wsd as UserSettings['weekStartDay'])
+        : DEFAULT_SETTINGS.weekStartDay,
+      weightUnit:
+        raw.weightUnit === 'lb' || raw.weightUnit === 'kg'
+          ? raw.weightUnit
+          : DEFAULT_SETTINGS.weightUnit,
+    });
+  });
+}
+
+export async function saveSettings(
+  userId: string,
+  settings: UserSettings,
+): Promise<void> {
+  await setDoc(settingsDoc(userId), stripUndefined(settings));
 }
 
 // --- Export / Import -----------------------------------------------------
@@ -349,8 +409,7 @@ export async function exportData(userId: string): Promise<ExportFile> {
   };
 }
 
-// Export a single program plus its instances. Same on-disk shape as
-// exportData, so the standard import flow handles re-loading it.
+// Same on-disk shape as exportData so the standard import flow re-loads it.
 export async function exportProgram(
   userId: string,
   programId: string,
@@ -388,9 +447,8 @@ export function parseImportFile(raw: string): ExportFile {
   return data as ExportFile;
 }
 
-// Merge by id. Existing records win on conflict — re-importing the same file
-// is a safe no-op. Writes go through a single batch per collection so the
-// import either lands fully or not at all.
+// Merge by id, existing records win on conflict — re-importing the same
+// file is a safe no-op.
 export async function importData(
   userId: string,
   file: ExportFile,

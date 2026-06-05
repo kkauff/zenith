@@ -1,10 +1,10 @@
 # Zenith
 
-Zenith is a fitness goal-tracking app for weightlifting and cardio
-(running, biking, swimming, etc.). You create programs, schedule
-exercises across the week, log your sessions, and watch your adherence
-and volume trend over time. It's a **PWA** — install it to your phone's
-home screen and it runs full-screen, no App Store needed.
+Zenith is a fitness goal-tracking app for strength training. You build
+programs, schedule exercises across the week, log your sessions, and
+watch your adherence and volume trend over time. It's a **PWA** —
+install it to your phone's home screen and it runs full-screen, no App
+Store needed.
 
 Live at **<https://zenith-theta-puce.vercel.app/>**.
 
@@ -14,42 +14,41 @@ Live at **<https://zenith-theta-puce.vercel.app/>**.
 
 ### What it does
 
-- **Track weightlifting and cardio.** Build programs out of individual
-  exercises. Weightlifting logs sets / reps / weight (or held duration
-  for things like planks). Cardio logs distance and time for running,
-  cycling, swimming, etc.
-- **Programs as plans.** Each program holds its own exercises with their
+- **Track strength work.** Programs are made of individual exercises.
+  Most exercises log sets × reps × weight; body-hold moves (planks,
+  hangs, wall sits) log sets × held duration instead.
+- **Programs as plans.** Each program has its own exercises with their
   own schedule — pinned weekdays ("Mon/Wed/Fri") or a frequency target
-  ("3x per week"). Programs can also carry rollup goals like "30 min of
-  cardio per day" or "5 mi of running per week" that aggregate across
-  every matching session you log.
+  ("3× per week"). Mark programs **active** to put them in your daily
+  plan, or **inactive** to shelve them without losing their history.
 - **Adherence at a glance.** Day / week / month rings on the progress
-  screen show how close you are to your scheduled work. Volume charts
-  show weekly trend for strength and cardio, with tag and per-exercise
-  filters layered on top.
+  screen show how close you are to your scheduled work. A 12-week
+  trend chart and weekday heatmap break it down further.
+- **Reschedule a day.** Push today's lift to a later day this week
+  without it counting as a miss. Useful when the body says no but the
+  week still has room.
 - **Rest when you need to.** If you're sick or injured, log a rest day
-  with a reason and optional note. Skipped workouts on rest days do
-  **not** count against your adherence — they're treated as "out of
-  program" rather than misses, so taking care of yourself doesn't tank
-  your stats.
+  with a reason and optional note. Rest days are "out of program" —
+  they neither count as misses nor toward your numerator.
+- **Settings.** Pick the day your week starts on (any day, defaults to
+  Monday) and your weight unit (lb or kg).
 
 ### How to use it
 
 1. **Sign in** with Google.
-2. **Create a program** — pick a category (Weight Lifting or Cardio),
-   give it a name, then add exercises. Type a name and Zenith will
-   suggest matches from its catalog (with sensible default tags and
-   tracking type). Set a schedule per exercise.
+2. **Create a program** — give it a name, then add exercises. Type a
+   name and Zenith suggests matches from its catalog (with default
+   tags and tracking type). Pick a schedule per exercise. Tick
+   "Activate now" if you want it in today's plan immediately.
 
    <img src="docs/screenshots/edit-program.png" alt="Editing an exercise inside a program" width="420" />
 
-3. **Log from the home screen.** "Today" shows what's scheduled. Tap an
-   exercise card to log sets, then save. You can also pick any
-   catalog exercise ad-hoc from the home screen without attaching it
-   to a program.
-4. **Check progress** on the Progress screen. Filter the volume charts
-   by tag (push/pull/legs, zone-2/vo2-max, etc.) or by specific
-   exercise to see what's actually moving.
+3. **Log from the home screen.** "Today" shows what's scheduled. Tap
+   an exercise card to log sets, then save. Use **Log ad-hoc** to pull
+   in any other weekday's set or pick individual exercises.
+4. **Check progress** on the Progress screen. Filter the Strength
+   Volume chart by tag (push / pull / legs / upper / lower / core) or
+   by specific exercise.
 5. **Mark a rest day** from the home screen when you're sick or
    injured. Those days won't be counted as misses.
 
@@ -57,8 +56,10 @@ Live at **<https://zenith-theta-puce.vercel.app/>**.
 
    <img src="docs/screenshots/rest-day-2.png" alt="Rest day modal with reason chips and an optional note" width="420" />
 
-6. **Export / import** your data as JSON at any time via the data
-   menu — useful for backups.
+6. **Or reschedule today** instead — pushes today's exercises onto a
+   later day this week, with the option to undo before doing them.
+7. **Export / import** your data as JSON at any time from a program's
+   detail page — useful for backups.
 
 ### How to request an account
 
@@ -78,7 +79,7 @@ analytics, no tracking pixels, no third-party telemetry.
 - **What's collected:** the Google account info Firebase Authentication
   exposes (display name, email, profile picture URL, Google UID), plus
   the workout data you create — programs, exercises, logged sessions,
-  rest days.
+  rest days, reschedules, settings.
 - **Where it lives:** in [Cloud Firestore](https://firebase.google.com/products/firestore)
   under a Firebase project I (the maintainer) operate. Data is scoped
   per-user via Firestore security rules — your records are only
@@ -87,9 +88,9 @@ analytics, no tracking pixels, no third-party telemetry.
   console (names + emails) and, as the project owner, I have technical
   read access to the underlying Firestore documents. I don't routinely
   look at them, but you should know it's possible.
-- **Export / delete:** every account can export the full dataset as
-  JSON from the in-app data menu at any time. To delete your account
-  and all associated Firestore data, reach out via my GitHub profile
+- **Export / delete:** every program can be exported as JSON from its
+  detail page at any time. To delete your account and all associated
+  Firestore data, reach out via my GitHub profile
   ([@kkauff](https://github.com/kkauff)) and I'll remove both the
   allowlist entry and the data.
 
@@ -135,25 +136,24 @@ across launches.
   auto-deploys. Live at <https://zenith-theta-puce.vercel.app/>.
 - **Auth:** Firebase Authentication, Google provider only.
 - **Storage:** Cloud Firestore. Data is scoped per signed-in user
-  under `users/{uid}/...` (programs, exercise library, logged
-  instances, rest days). Firestore security rules restrict each
+  under `users/{uid}/...`. Firestore security rules restrict each
   document subtree to its owning UID — a user can only read / write
   their own data.
 - **Live sync:** Firestore `onSnapshot` listeners — log a session on
   your phone and the desktop view updates without a reload.
 - **PWA:** A Web App Manifest + service worker make the app
   installable to the iOS / Android home screen and runnable
-  full-screen offline-friendly. On iOS, open the deployed URL in
-  Safari → Share → "Add to Home Screen". On Android, Chrome shows an
-  Install prompt automatically (or menu → "Install app").
+  full-screen offline-friendly.
 
 ### Per-user Firestore layout
 
 ```
-users/{uid}/programs/{programId}     → Program docs (with embedded exercises + rollup goals)
-users/{uid}/instances/{instanceId}   → Instance docs (one per logged session)
-users/{uid}/library/{exerciseId}     → Library mirror of every exercise ever in a program
-users/{uid}/restDays/{YYYY-MM-DD}    → Rest days, keyed by local date
+users/{uid}/programs/{programId}                Program docs (with embedded exercises)
+users/{uid}/instances/{instanceId}              Instance docs (one per logged session)
+users/{uid}/exercises/{exerciseId}              Library mirror of every exercise ever in a program
+users/{uid}/restDays/{YYYY-MM-DD}               Rest days, keyed by local date
+users/{uid}/reschedules/{YYYY-MM-DD}            Push-a-day records, keyed by source date
+users/{uid}/settings/preferences                Singleton preferences doc (week start, weight unit)
 ```
 
 The library mirror lets historical instances resolve their exercise
@@ -166,28 +166,21 @@ behave more like tags than containers.
 
 ### Programs
 
-- Two program categories: **Weight Lifting** and **Cardio**.
-  (Nutrition and Mindfulness are scaffolded but not yet available.)
-- Multiple programs at once. Programs are organizational tags —
-  deleting one does **not** delete your logged sessions; progress
-  history survives.
+- Each program is **active** or **inactive**. Active programs feed
+  today's plan and adherence math; inactive ones stay in *My Programs*
+  (dimmed with an "Inactive" pill) and keep their full history. Toggle
+  via the gear menu on the program detail page.
+- Multiple programs at once. Deleting a program does **not** delete
+  your logged sessions — instances keep a dangling `programId` so
+  progress survives.
 - Each program holds its own list of exercises with their own
   scheduling.
-- **Rollup goals** per program: aggregate amount-over-time goals
-  ("30 min of cardio M/W/F", "5 mi of running per week"). Matching
-  sessions from _any_ program (or ad-hoc catalog logs) count toward
-  them.
 
 ### Exercises
 
 - **Tracking types:**
-  - `weight` — sets × reps × weight (lb).
+  - `weight` — sets × reps × weight.
   - `time` — sets × held duration (planks, hangs, wall sits).
-  - `cardio` — every set logs distance **and** time; the goal kind
-    decides which one is the headline target.
-- **Cardio activities:** Running, Treadmill Running, Outdoor Bike,
-  Indoor Bike, Elliptical, Stairmaster, Swimming. Default distance
-  unit per activity (miles for road, yards for swim), overridable.
 - **Schedules:**
   - `weekly-days` — pinned weekdays (any subset of Sun–Sat).
   - `frequency` — N times per week / month, no specific day attached.
@@ -195,54 +188,64 @@ behave more like tags than containers.
   sets, rep ranges like `8-10`). The log form pre-fills from these.
 - **Hardcoded exercise catalog** with ~60 common moves: bench press,
   squat, deadlift, lat pulldown, hammer curl, plank, dead hang, etc.
-  Plus the seven cardio activities. Fuzzy matching means "bnch press"
-  surfaces "Bench Press"; aliases like "rdl", "ohp", "pullup" all
-  resolve.
-- **Tags** are auto-applied from the catalog and shown as chips on
-  the form:
-  - Weightlifting: `upper`, `lower`, `core`, `push`, `pull`, `legs`
-  - Cardio: `zone-2`, `threshold`, `vo2-max`, `sprints`, `easy`
-  - System: `cardio` (auto-applied to every cardio-category exercise)
-- Users can still create fully custom exercises that aren't in the
-  catalog — they just pick tags themselves.
+  Fuzzy matching means "bnch press" surfaces "Bench Press"; aliases
+  like "rdl", "ohp", "pullup" all resolve.
+- **Tags:** `upper`, `lower`, `core`, `push`, `pull`, `legs`. Auto-
+  inferred from the catalog (exact alias match + fuzzy fallback) for
+  exercises that match an entry; user-overridable per-exercise from
+  the program detail page.
 
 ### Today screen
 
-- Greeting + day's scheduled exercises across all programs.
+- Greeting + day's scheduled exercises across all active programs.
 - Inline log cards: set the values, tap save, done.
 - "Today" includes both pinned-day exercises and frequency-target
   progress for the current period.
-- Ad-hoc logging: pick any exercise from the global catalog and log
-  it without attaching it to a program.
-- Rollup-goal progress rows for the day / period.
-- **Rest day modal** with reason (sick / injured / other) and
-  optional notes.
+- **Log ad-hoc** — one dropdown for borrowing another weekday's full
+  set (missed days bubbled to the top), or picking specific exercises
+  one at a time.
+- **Reschedule today** — push today's exercises onto a later day this
+  week. Source day stops expecting them; target day picks them up. An
+  undo banner appears on the source day until the next reschedule.
+- **Rest day modal** with reason (sick / injured / other) and optional
+  notes.
 
 ### Progress screen
 
 - **Adherence rings** for day, week, and month. Adherence prorates
   uniformly across weekly-pinned days and frequency goals. Rest days
   drop out of the denominator entirely.
-- **Adherence insights** with longest streak / current streak / best
-  week summaries.
-- **Volume charts** — 8-week sparklines for Strength Volume and
-  Cardio Volume.
-  - Filter by tag (chips for push/pull/legs, zone-2/threshold/etc.).
-  - Filter by specific exercise via a multiselect dropdown.
-  - Filtered series overlays the overall series on the same y-axis
-    so you can compare directly.
-  - Trend indicator (up / down / flat) per chart.
+- **Adherence insights** — 12-week trend chart with weekday averages
+  and a time-of-day histogram. Filterable by program.
+- **Volume chart** — 8-week sparkline of strength volume. Filter by
+  tag chip (push / pull / legs / upper / lower / core) or by specific
+  exercise via a multiselect dropdown. The filtered series overlays
+  the overall series on the same y-axis so you can compare directly.
 - **History** list of every logged session, with delete. Sessions
   whose program was deleted still show, tagged "Removed program";
   ad-hoc sessions are tagged "Ad-hoc".
+
+### Program detail page
+
+- Exercises grouped by weekday with a colored heatmap header — tap a
+  weekday cell to expand its exercise list. Each row has clickable
+  tag chips so you can re-tag without opening the edit form.
+- Recent sessions grouped by date with a per-day progress ring (how
+  many of the day's scheduled exercises you logged).
+- Gear menu in the header for deactivate / activate / delete, each
+  behind a confirmation modal.
+
+### Settings
+
+- **Start of week** — any day, Monday by default.
+- **Weight unit** — lb or kg (display label only; values aren't
+  auto-converted).
 
 ### Data
 
 - **Per-user isolation** via Firestore security rules.
 - **Live cross-device sync** via `onSnapshot`.
-- **Export** the full account as JSON.
-- **Import** that JSON back — existing records win on conflict, so
-  re-importing is a safe no-op.
+- **Export / import** a single program as JSON from its detail page.
 
 ### Platform
 
@@ -259,10 +262,6 @@ Next features I'm planning to tackle:
   AI-driven insights and workflows (training suggestions, weekly
   recaps, plateau detection) using _your_ key — no shared inference
   costs.
-- **Strava integration** to auto-import cardio sessions.
-- **Garmin integration** — blocked on Garmin developer access being
-  gated to businesses; tracking this and will revisit when feasible.
-- **Zwift integration** to pull indoor cycling sessions.
 - **Improved muscle-group visualization** for strength progression,
   using
   [`react-native-body-highlighter`](https://github.com/Onyo/react-native-body-highlighter)
@@ -356,36 +355,37 @@ src/
   auth.ts                Firebase Auth wrapper (Google provider)
   firebase.ts            Firebase app init from env vars
   storage.ts             Firestore reads / writes / live subscriptions
-  types.ts               Program, Exercise, PlannedSet, Instance, RestDay, RollupGoal, …
+  settings.tsx           SettingsContext + useSettings hook
+  types.ts               Program, Exercise, PlannedSet, Instance, RestDay, Reschedule, UserSettings
   templates.ts           categories + helpers (schedule/reps/duration parsing)
   today.ts               "what's scheduled today" + adherence math
-  instance.ts            instance helpers — name/tag/tracking-type resolution
-  rollup.ts              rollup-goal progress calculations
+  instance.ts            name / tag / tracking-type resolution for logged instances
   exercise-library.ts    hardcoded global exercise catalog + fuzzy matching
   index.css              mobile-first styles
   main.tsx               React entry point
   components/
     Login.tsx                sign-in screen
-    AppHeader.tsx            header showing avatar + name + data menu
+    AppHeader.tsx            header showing avatar + name + nav + settings menu
     Home.tsx                 home / today screen
     TodayBox.tsx             today summary card
     TodayExerciseCard.tsx    inline log card for one exercise
     RestDayModal.tsx         rest-day form
-    ActiveProgramsPanel.tsx  program list on the home screen
+    RescheduleModal.tsx      push-a-day picker modal
+    LogAdhocPicker.tsx       unified ad-hoc picker (weekday or specific exercise)
+    ActiveProgramsPanel.tsx  active program list on the home screen
     NewProgram.tsx           create-a-program form
-    ProgramDetail.tsx        view / edit a program
+    ProgramDetail.tsx        view / edit a program (heatmap + sessions)
     ProgramsScreen.tsx       all programs view
     ExerciseForm.tsx         add / edit a single exercise
-    ExercisePicker.tsx       catalog-driven exercise picker
+    ExercisePicker.tsx       searchable single-exercise picker
     SchedulePicker.tsx       weekday / frequency picker
     SetEditor.tsx            planned-sets editor
-    RollupGoalForm.tsx       rollup goal create/edit form
-    RollupProgressRow.tsx    rollup goal progress row
+    SettingsScreen.tsx       user preferences (week start, weight unit)
     ProgressScreen.tsx       progress wrapper
-    ProgressPanel.tsx        strength + cardio volume charts
+    ProgressPanel.tsx        strength volume chart
     ProgressSummaryPanel.tsx home-screen mini progress summary
     AdherenceRings.tsx       day/week/month adherence rings
-    AdherenceInsights.tsx    streaks + insights summary
+    AdherenceInsights.tsx    trend + weekday + time-of-day insights
     ProgressRing.tsx         single-ring SVG primitive
     HistoryPanel.tsx         logged-instance history
     MultiselectDropdown.tsx  reusable multiselect with pills
