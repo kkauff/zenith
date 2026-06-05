@@ -17,14 +17,12 @@
 
 import type {
   Instance,
-  LibraryExercise,
   Program,
   Exercise,
+  Reschedule,
   RestDay,
-  RollupGoal,
   Schedule,
 } from './types';
-import { resolveExerciseTags } from './instance';
 
 export type ScheduledExercise = {
   program: Program;
@@ -43,15 +41,34 @@ function endOfDay(date: Date): Date {
   return d;
 }
 
-export function startOfWeek(date: Date): Date {
-  // Sunday-start week, matching JS getDay() convention.
+// `weekStartDay`: 0 = Sunday … 6 = Saturday. Defaults to Monday.
+export function startOfWeek(date: Date, weekStartDay: 0 | 1 | 2 | 3 | 4 | 5 | 6 = 1): Date {
   const d = startOfDay(date);
-  d.setDate(d.getDate() - d.getDay());
+  const offset = (d.getDay() - weekStartDay + 7) % 7;
+  d.setDate(d.getDate() - offset);
   return d;
 }
 
-function endOfWeek(date: Date): Date {
-  const d = startOfWeek(date);
+// Dates strictly after `today` up through the last day of the same week.
+// Empty when today is already the week's last day.
+export function daysRemainingInWeek(
+  today: Date,
+  weekStartDay: 0 | 1 | 2 | 3 | 4 | 5 | 6 = 1,
+): Date[] {
+  const out: Date[] = [];
+  const start = startOfDay(today);
+  const endDow = (weekStartDay + 6) % 7;
+  const remaining = (endDow - start.getDay() + 7) % 7;
+  for (let i = 1; i <= remaining; i++) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    out.push(d);
+  }
+  return out;
+}
+
+function endOfWeek(date: Date, weekStartDay: 0 | 1 | 2 | 3 | 4 | 5 | 6 = 1): Date {
+  const d = startOfWeek(date, weekStartDay);
   d.setDate(d.getDate() + 6);
   return endOfDay(d);
 }
@@ -68,9 +85,8 @@ function endOfMonth(date: Date): Date {
   return endOfDay(d);
 }
 
-// YYYY-MM-DD in local time. Used as the doc id for RestDay and as the lookup
-// key for "is this day a rest day?". Local-time on purpose — the user's
-// concept of "today" is their wall clock, not UTC.
+// Local-time YYYY-MM-DD — matches the user's wall-clock "today", not UTC.
+// Doubles as the Firestore doc id for RestDay and Reschedule.
 export function dateKey(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -98,9 +114,6 @@ export function dayName(date: Date): string {
   return date.toLocaleDateString(undefined, { weekday: 'long' });
 }
 
-// Time-of-day greeting + first name. Reads `getHours()` so it picks up the
-// user's local timezone automatically. Falls back to no name when the auth
-// profile doesn't expose one.
 export function greetingFor(date: Date, fullName: string): string {
   const first = fullName.trim().split(/\s+/)[0] ?? '';
   const h = date.getHours();
@@ -114,12 +127,22 @@ export function greetingFor(date: Date, fullName: string): string {
 
 // --- Period helpers -----------------------------------------------------
 
-function startOfPeriod(date: Date, period: 'week' | 'month'): Date {
-  return period === 'week' ? startOfWeek(date) : startOfMonth(date);
+function startOfPeriod(
+  date: Date,
+  period: 'week' | 'month',
+  weekStartDay: 0 | 1 | 2 | 3 | 4 | 5 | 6 = 1,
+): Date {
+  return period === 'week'
+    ? startOfWeek(date, weekStartDay)
+    : startOfMonth(date);
 }
 
-function endOfPeriod(date: Date, period: 'week' | 'month'): Date {
-  return period === 'week' ? endOfWeek(date) : endOfMonth(date);
+function endOfPeriod(
+  date: Date,
+  period: 'week' | 'month',
+  weekStartDay: 0 | 1 | 2 | 3 | 4 | 5 | 6 = 1,
+): Date {
+  return period === 'week' ? endOfWeek(date, weekStartDay) : endOfMonth(date);
 }
 
 function daysBetween(a: Date, b: Date): number {
@@ -132,27 +155,146 @@ function daysBetween(a: Date, b: Date): number {
 // All exercises across all programs that are pinned to the given day via a
 // weekly-days schedule. Frequency-scheduled exercises are NOT included
 // here — they're surfaced separately via `frequencyGoalsForDay`.
+//
+// Reschedules (push-a-day) shift the moved exerciseIds off their source
+// date and onto their target date. If `reschedules` is omitted no shifting
+// happens — callers without the data behave identically to the original.
 export function exercisesForDay(
   programs: Program[],
   date: Date,
+  reschedules?: Reschedule[],
 ): ScheduledExercise[] {
   const dow = date.getDay();
+  const key = dateKey(date);
+  const movedAway = new Set<string>();
+  const movedIn: string[] = [];
+  if (reschedules) {
+    for (const r of reschedules) {
+      if (r.fromDate === key) {
+        for (const id of r.exerciseIds) movedAway.add(id);
+      }
+      if (r.toDate === key) {
+        for (const id of r.exerciseIds) movedIn.push(id);
+      }
+    }
+  }
+
   const out: ScheduledExercise[] = [];
+  const seen = new Set<string>();
   for (const program of programs) {
     for (const exercise of program.exercises) {
       if (
         exercise.schedule.kind === 'weekly-days' &&
-        exercise.schedule.days.includes(dow)
+        exercise.schedule.days.includes(dow) &&
+        !movedAway.has(exercise.id)
       ) {
         out.push({ program, exercise });
+        seen.add(exercise.id);
       }
     }
+  }
+  for (const id of movedIn) {
+    if (seen.has(id)) continue;
+    const resolved = findExercise(programs, id);
+    if (!resolved) continue;
+    out.push(resolved);
+    seen.add(id);
   }
   return out;
 }
 
+// Returns null when the exercise has been deleted between a reschedule
+// being saved and now — caller filters these out.
+export function findExercise(
+  programs: Program[],
+  exerciseId: string,
+): ScheduledExercise | null {
+  for (const program of programs) {
+    for (const exercise of program.exercises) {
+      if (exercise.id === exerciseId) return { program, exercise };
+    }
+  }
+  return null;
+}
+
 export function instancesOnDay(instances: Instance[], date: Date): Instance[] {
   return instances.filter((i) => isSameDay(new Date(i.loggedAt), date));
+}
+
+// --- Borrowable days ----------------------------------------------------
+
+export type MissedDay = {
+  date: Date;
+  exercises: ScheduledExercise[];
+};
+
+export type WeekdayExercises = {
+  dow: number;
+  exercises: ScheduledExercise[];
+};
+
+export type BorrowableDays = {
+  missed: MissedDay[];
+  weekdays: WeekdayExercises[];
+};
+
+// `missed` = past 7 days (excluding today) that had scheduled work, no
+// instances logged, and weren't rest days — sorted newest-first.
+// `weekdays` = per-dow roll-up of every weekly-days exercise across all
+// programs, dropping dows with nothing pinned.
+export function borrowableDays(
+  programs: Program[],
+  instances: Instance[],
+  restDays: RestDay[],
+  today: Date,
+  reschedules?: Reschedule[],
+): BorrowableDays {
+  const restKeys = new Set(restDays.map((r) => r.date));
+  const todayStart = startOfDay(today);
+
+  const missed: MissedDay[] = [];
+  for (let i = 1; i <= 7; i++) {
+    const day = new Date(todayStart);
+    day.setDate(day.getDate() - i);
+    if (restKeys.has(dateKey(day))) continue;
+    const dayStart = startOfDay(new Date(day));
+    if (
+      programs.every(
+        (p) => startOfDay(new Date(p.createdAt)) > dayStart,
+      )
+    ) {
+      continue;
+    }
+    const exercises = exercisesForDay(programs, day, reschedules).filter(
+      ({ program }) => startOfDay(new Date(program.createdAt)) <= dayStart,
+    );
+    if (exercises.length === 0) continue;
+    const anyLogged = instances.some(
+      (inst) =>
+        isSameDay(new Date(inst.loggedAt), day) &&
+        exercises.some((e) => e.exercise.id === inst.exerciseId),
+    );
+    if (anyLogged) continue;
+    missed.push({ date: day, exercises });
+  }
+
+  const weekdays: WeekdayExercises[] = [];
+  for (let dow = 0; dow < 7; dow++) {
+    const exercises: ScheduledExercise[] = [];
+    for (const program of programs) {
+      for (const exercise of program.exercises) {
+        if (
+          exercise.schedule.kind === 'weekly-days' &&
+          exercise.schedule.days.includes(dow)
+        ) {
+          exercises.push({ program, exercise });
+        }
+      }
+    }
+    if (exercises.length > 0) weekdays.push({ dow, exercises });
+  }
+
+  return { missed, weekdays };
 }
 
 // --- Frequency goals ----------------------------------------------------
@@ -168,13 +310,13 @@ export type FrequencyGoalView = {
   priority: number;
 };
 
-// Frequency-scheduled exercises that still have remaining target for the
-// current period. Sorted by urgency (most pressing first). Goals already
-// met for the period are dropped — they fall back into the ad-hoc picker.
+// Sorted by urgency (most pressing first). Goals already met for the
+// period are dropped.
 export function frequencyGoalsForDay(
   programs: Program[],
   instances: Instance[],
   today: Date,
+  weekStartDay: 0 | 1 | 2 | 3 | 4 | 5 | 6 = 1,
 ): FrequencyGoalView[] {
   const todayDay = startOfDay(today);
   const out: FrequencyGoalView[] = [];
@@ -187,8 +329,8 @@ export function frequencyGoalsForDay(
       const period = exercise.schedule.period;
       const target = exercise.schedule.times;
       if (target <= 0) continue;
-      const periodStart = startOfPeriod(today, period);
-      const periodEnd = endOfPeriod(today, period);
+      const periodStart = startOfPeriod(today, period, weekStartDay);
+      const periodEnd = endOfPeriod(today, period, weekStartDay);
 
       const completedInPeriod = instances.filter((i) => {
         if (i.exerciseId !== exercise.id) return false;
@@ -199,8 +341,7 @@ export function frequencyGoalsForDay(
       const remaining = target - completedInPeriod;
       if (remaining <= 0) continue;
 
-      // Days remaining INCLUDING today (so a same-day deadline gives
-      // priority of `remaining`, not infinity).
+      // INCLUDING today so a same-day deadline doesn't divide by zero.
       const daysRemaining = Math.max(1, daysBetween(todayDay, periodEnd) + 1);
       const priority = remaining / daysRemaining;
 
@@ -222,31 +363,24 @@ export function frequencyGoalsForDay(
 
 // --- Adherence ---------------------------------------------------------
 
-// Days in a "period" for proration purposes. Uses 7 for weekly and a fixed
-// 30 for monthly (keeps the math stable without month-by-month wobble; the
-// user explicitly described "rough proration").
+// Fixed 30 for monthly keeps the math stable without month-by-month wobble.
 function periodDays(period: 'week' | 'month'): number {
   return period === 'week' ? 7 : 30;
 }
 
-// How many "should-do"s does this schedule contribute over [startDate,
-// endDate], given the program's createdAt? Range and schedule semantics:
-//
-//   - weekly-days: count days in range that match schedule.days.
-//   - frequency:   times × (range-days / period-days). Linear in days, so
-//                  cross-period boundaries don't need special handling.
-//
-// Rest days are dropped before counting: they're "out of program" by the
-// user's choice, so they neither earn nor lose adherence credit. For
-// weekly-days that means a scheduled rest day doesn't count toward
-// expected; for frequency it shrinks the divisor (range-days minus rest
-// days in range).
+// "Should-do" count for this exercise across [startDate, endDate]:
+//   weekly-days: days in range matching schedule.days (minus rest days,
+//                minus rescheduled-away days, plus rescheduled-in days).
+//   frequency:   times × range-days / period-days, linear in days so
+//                cross-period boundaries need no special handling.
 function expectedForRange(
+  exerciseId: string,
   schedule: Schedule,
   programCreatedAt: number,
   startDate: Date,
   endDate: Date,
   restDayKeys?: ReadonlySet<string>,
+  reschedules?: Reschedule[],
 ): number {
   const programStart = startOfDay(new Date(programCreatedAt));
   const start = startOfDay(startDate) > programStart
@@ -254,6 +388,17 @@ function expectedForRange(
     : programStart;
   const end = startOfDay(endDate);
   if (end < start) return 0;
+
+  // Frequency math ignores reschedules — those only move weekly-days work.
+  const movedAwayDays = new Set<string>();
+  const movedInDays = new Set<string>();
+  if (reschedules) {
+    for (const r of reschedules) {
+      if (!r.exerciseIds.includes(exerciseId)) continue;
+      movedAwayDays.add(r.fromDate);
+      movedInDays.add(r.toDate);
+    }
+  }
 
   if (schedule.kind === 'weekly-days') {
     let count = 0;
@@ -263,7 +408,11 @@ function expectedForRange(
       cursor.setDate(cursor.getDate() + 1)
     ) {
       if (restDayKeys?.has(dateKey(cursor))) continue;
-      if (schedule.days.includes(cursor.getDay())) count += 1;
+      const ck = dateKey(cursor);
+      const expectedHere =
+        (schedule.days.includes(cursor.getDay()) && !movedAwayDays.has(ck)) ||
+        movedInDays.has(ck);
+      if (expectedHere) count += 1;
     }
     return count;
   }
@@ -305,6 +454,7 @@ export function adherence(
   restDays: RestDay[],
   startDate: Date,
   endDate: Date,
+  reschedules?: Reschedule[],
 ): number | null {
   const restKeys = new Set(restDays.map((r) => r.date));
   let totalExpected = 0;
@@ -313,11 +463,13 @@ export function adherence(
   for (const program of programs) {
     for (const exercise of program.exercises) {
       const expected = expectedForRange(
+        exercise.id,
         exercise.schedule,
         program.createdAt,
         startDate,
         endDate,
         restKeys,
+        reschedules,
       );
       if (expected === 0) continue;
       const completed = completedForRange(
@@ -340,8 +492,9 @@ export function adherenceToday(
   instances: Instance[],
   restDays: RestDay[],
   today: Date,
+  reschedules?: Reschedule[],
 ): number | null {
-  return adherence(programs, instances, restDays, today, today);
+  return adherence(programs, instances, restDays, today, today, reschedules);
 }
 
 export function adherenceWeek(
@@ -349,8 +502,17 @@ export function adherenceWeek(
   instances: Instance[],
   restDays: RestDay[],
   today: Date,
+  reschedules?: Reschedule[],
+  weekStartDay: 0 | 1 | 2 | 3 | 4 | 5 | 6 = 1,
 ): number | null {
-  return adherence(programs, instances, restDays, startOfWeek(today), today);
+  return adherence(
+    programs,
+    instances,
+    restDays,
+    startOfWeek(today, weekStartDay),
+    today,
+    reschedules,
+  );
 }
 
 export function adherenceMonth(
@@ -358,8 +520,16 @@ export function adherenceMonth(
   instances: Instance[],
   restDays: RestDay[],
   today: Date,
+  reschedules?: Reschedule[],
 ): number | null {
-  return adherence(programs, instances, restDays, startOfMonth(today), today);
+  return adherence(
+    programs,
+    instances,
+    restDays,
+    startOfMonth(today),
+    today,
+    reschedules,
+  );
 }
 
 export type DayAdherence = {
@@ -368,23 +538,9 @@ export type DayAdherence = {
   completed: number;
 };
 
-export type AdherenceCategory = 'cardio' | 'strength';
-
-function exerciseCategory(ex: Exercise): AdherenceCategory {
-  return ex.trackingType === 'cardio' ? 'cardio' : 'strength';
-}
-
-// Per-day adherence breakdown for a date range. Returns one entry per day
-// (inclusive of both endpoints). `expected` is fractional for frequency
-// schedules (e.g. 2/week → 0.286 per day). `completed` is the count of
-// instances logged that day for matching exercises.
-//
-// `filter` applies OR semantics across all three dimensions (program /
-// weekday / category), mirroring how the volume charts combine tag +
-// exercise chips. A (day, exercise) pair is included if ANY active filter
-// matches. When all filter sets are empty (or absent), no filter is
-// applied. A category set containing both 'cardio' and 'strength' is also
-// effectively no filter — callers handle that simplification themselves.
+// One entry per day across [startDate, endDate]. `expected` is fractional
+// for frequency schedules (2/week → 0.286/day). `filter` is OR across
+// dimensions — a (day, exercise) is included if ANY active filter matches.
 export function dailyAdherence(
   programs: Program[],
   instances: Instance[],
@@ -394,16 +550,14 @@ export function dailyAdherence(
   filter?: {
     programIds?: ReadonlySet<string>;
     weekdays?: ReadonlySet<number>;
-    categories?: ReadonlySet<AdherenceCategory>;
   },
+  reschedules?: Reschedule[],
 ): DayAdherence[] {
   const start = startOfDay(startDate);
   const end = startOfDay(endDate);
   const restKeys = new Set(restDays.map((r) => r.date));
   const hasFilter = !!(
-    filter?.programIds?.size ||
-    filter?.weekdays?.size ||
-    filter?.categories?.size
+    filter?.programIds?.size || filter?.weekdays?.size
   );
   const out: DayAdherence[] = [];
   for (
@@ -413,8 +567,8 @@ export function dailyAdherence(
   ) {
     const day = new Date(cursor);
     const weekday = day.getDay();
-    // Rest days are out-of-program: zero expected so they don't sink the
-    // adherence average, but emit a row so chart layers can mark them.
+    // Emit a row so chart layers can mark rest days, but zero expected so
+    // they don't sink the adherence average.
     if (restKeys.has(dateKey(day))) {
       out.push({ date: day, expected: 0, completed: 0 });
       continue;
@@ -426,15 +580,16 @@ export function dailyAdherence(
         if (hasFilter) {
           const progMatch = filter?.programIds?.has(program.id) ?? false;
           const dayMatch = filter?.weekdays?.has(weekday) ?? false;
-          const catMatch =
-            filter?.categories?.has(exerciseCategory(exercise)) ?? false;
-          if (!progMatch && !dayMatch && !catMatch) continue;
+          if (!progMatch && !dayMatch) continue;
         }
         const exp = expectedForRange(
+          exercise.id,
           exercise.schedule,
           program.createdAt,
           day,
           day,
+          undefined,
+          reschedules,
         );
         if (exp === 0) continue;
         const com = completedForRange(exercise.id, instances, day, day);
@@ -447,174 +602,18 @@ export function dailyAdherence(
   return out;
 }
 
-// Whether an instance's resolved exercise matches an active filter set,
-// using the same OR semantics as dailyAdherence. Used for filtering
-// non-adherence-derived views (e.g. time-of-day histogram).
+// Same OR semantics as dailyAdherence. Used for views that operate on
+// instances directly (e.g. time-of-day histogram).
 export function instanceMatchesFilter(
   inst: Instance,
-  programs: Program[],
   filter: {
     programIds?: ReadonlySet<string>;
     weekdays?: ReadonlySet<number>;
-    categories?: ReadonlySet<AdherenceCategory>;
   },
 ): boolean {
-  const hasFilter = !!(
-    filter.programIds?.size ||
-    filter.weekdays?.size ||
-    filter.categories?.size
-  );
+  const hasFilter = !!(filter.programIds?.size || filter.weekdays?.size);
   if (!hasFilter) return true;
   if (inst.programId && filter.programIds?.has(inst.programId)) return true;
   if (filter.weekdays?.has(new Date(inst.loggedAt).getDay())) return true;
-  if (filter.categories?.size) {
-    // Need to resolve the exercise's category from program → exercise.
-    const program = programs.find((p) => p.id === inst.programId);
-    const ex = program?.exercises.find((e) => e.id === inst.exerciseId);
-    if (ex && filter.categories.has(exerciseCategory(ex))) return true;
-    // Fall back to instance's own trackingType if denormalized.
-    if (inst.trackingType) {
-      const cat: AdherenceCategory =
-        inst.trackingType === 'cardio' ? 'cardio' : 'strength';
-      if (filter.categories.has(cat)) return true;
-    }
-  }
   return false;
-}
-
-// --- Rollup goals -------------------------------------------------------
-
-// Sum the chosen metric across instances matching the goal's target in the
-// given range. Target matches either by exerciseId (specific exercise) or
-// by tag (any exercise carrying that tag — picks up program exercises,
-// library entries, and ad-hoc catalog logs). For distance goals we only
-// count instances whose `cardioUnit` matches the goal's unit (no unit
-// conversion yet — the user can pick a consistent unit when creating).
-function sumRollupMetric(
-  goal: RollupGoal,
-  instances: Instance[],
-  programs: Program[],
-  library: LibraryExercise[],
-  startDate: Date,
-  endDate: Date,
-): number {
-  const start = startOfDay(startDate);
-  const end = endOfDay(endDate);
-  let total = 0;
-  for (const inst of instances) {
-    const t = new Date(inst.loggedAt);
-    if (t < start || t > end) continue;
-    if (goal.target.kind === 'exercise') {
-      if (inst.exerciseId !== goal.target.exerciseId) continue;
-    } else {
-      const tags = resolveExerciseTags(inst, programs, library);
-      if (!tags.includes(goal.target.tag)) continue;
-    }
-    if (goal.metric === 'time') {
-      for (const s of inst.sets) {
-        if (s.durationSeconds !== undefined) total += s.durationSeconds;
-      }
-    } else {
-      // Distance — only include instances that logged in the matching unit
-      // so we don't sum miles + km blindly.
-      if (inst.cardioUnit && inst.cardioUnit !== goal.unit) continue;
-      for (const s of inst.sets) {
-        if (s.distance !== undefined) total += s.distance;
-      }
-    }
-  }
-  return total;
-}
-
-export type RollupProgressView = {
-  program: Program;
-  goal: RollupGoal;
-  current: number;
-  target: number;
-  // 'today' for weekly-days mode (only on scheduled days), 'this week' or
-  // 'this month' for total-period mode. Used directly in the UI.
-  periodLabel: 'today' | 'this week' | 'this month';
-};
-
-// All rollup goals that should appear in today's panel — same "show only
-// when there's still progress to make" rule as frequency goals. Goals
-// already met for the relevant period drop out.
-export function rollupProgressForToday(
-  programs: Program[],
-  instances: Instance[],
-  library: LibraryExercise[],
-  today: Date,
-): RollupProgressView[] {
-  const out: RollupProgressView[] = [];
-  for (const program of programs) {
-    for (const goal of program.rollupGoals ?? []) {
-      const view = computeRollupProgress(
-        program,
-        goal,
-        programs,
-        instances,
-        library,
-        today,
-      );
-      if (!view) continue;
-      if (view.current >= view.target) continue;
-      out.push(view);
-    }
-  }
-  // Per-day rows first (more immediate), then period totals. Stable within
-  // each group based on insertion order so the user sees their goals in
-  // the order they created them.
-  out.sort((a, b) => {
-    const aPerDay = a.goal.schedule.kind === 'weekly-days' ? 0 : 1;
-    const bPerDay = b.goal.schedule.kind === 'weekly-days' ? 0 : 1;
-    return aPerDay - bPerDay;
-  });
-  return out;
-}
-
-function computeRollupProgress(
-  program: Program,
-  goal: RollupGoal,
-  programs: Program[],
-  instances: Instance[],
-  library: LibraryExercise[],
-  today: Date,
-): RollupProgressView | null {
-  if (goal.schedule.kind === 'weekly-days') {
-    if (!goal.schedule.days.includes(today.getDay())) return null;
-    const current = sumRollupMetric(
-      goal,
-      instances,
-      programs,
-      library,
-      today,
-      today,
-    );
-    return {
-      program,
-      goal,
-      current,
-      target: goal.schedule.amount,
-      periodLabel: 'today',
-    };
-  }
-  const period = goal.schedule.period;
-  const periodStart =
-    period === 'week' ? startOfWeek(today) : startOfMonth(today);
-  const periodEnd = period === 'week' ? endOfWeek(today) : endOfMonth(today);
-  const current = sumRollupMetric(
-    goal,
-    instances,
-    programs,
-    library,
-    periodStart,
-    periodEnd,
-  );
-  return {
-    program,
-    goal,
-    current,
-    target: goal.schedule.amount,
-    periodLabel: period === 'week' ? 'this week' : 'this month',
-  };
 }

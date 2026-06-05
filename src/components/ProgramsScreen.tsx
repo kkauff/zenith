@@ -5,6 +5,7 @@ import { getCategory } from '../templates';
 import * as store from '../storage';
 import { Button } from './ui/button';
 import { Card, CardHeader, CardTitle } from './ui/card';
+import { cn } from '@/lib/utils';
 
 type Props = {
   userId: string;
@@ -99,13 +100,49 @@ export function ProgramsScreen({
                     type="button"
                     onClick={() => onOpen(p.id)}
                     aria-label={`Open ${p.name}`}
-                    className="w-full min-h-14 flex items-center gap-3 rounded-lg bg-surface2 px-3.5 py-3 text-left transition-colors hover:border-primary/40 border border-transparent active:bg-surface2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    className={cn(
+                      'w-full min-h-14 flex items-center gap-3 rounded-lg px-3.5 py-3 text-left transition-colors hover:border-primary/40 border border-transparent active:bg-surface2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                      p.active
+                        ? 'bg-surface2'
+                        : 'bg-surface2/40 opacity-70',
+                    )}
                   >
-                    <span className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <span
+                      className={cn(
+                        'flex size-9 items-center justify-center rounded-md',
+                        p.active
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-muted-foreground/10 text-muted-foreground',
+                      )}
+                    >
                       <Icon aria-hidden className="size-5" />
                     </span>
                     <span className="flex-1 min-w-0 flex flex-col gap-0.5">
-                      <span className="truncate font-semibold">{p.name}</span>
+                      <span className="flex items-center gap-3">
+                        <span className="truncate font-semibold flex-1 min-w-0">
+                          {p.name}
+                        </span>
+                        <span
+                          aria-label={
+                            p.active ? 'Active program' : 'Inactive program'
+                          }
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-full border px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide flex-shrink-0',
+                            p.active
+                              ? 'border-primary/60 bg-primary/10 text-primary shadow-glow-primary-sm'
+                              : 'border-border bg-surface2 text-muted-foreground',
+                          )}
+                        >
+                          <span
+                            aria-hidden
+                            className={cn(
+                              'size-1 rounded-full',
+                              p.active ? 'bg-primary' : 'bg-muted-foreground/60',
+                            )}
+                          />
+                          {p.active ? 'Active' : 'Inactive'}
+                        </span>
+                      </span>
                       <span className="text-xs text-muted-foreground">
                         {cat?.name ?? p.categoryKey} · {p.exercises.length}{' '}
                         exercise{p.exercises.length === 1 ? '' : 's'}

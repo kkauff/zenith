@@ -1,5 +1,11 @@
 import { ArrowLeft } from 'lucide-react';
-import type { Instance, LibraryExercise, Program, RestDay } from '../types';
+import type {
+  Instance,
+  LibraryExercise,
+  Program,
+  Reschedule,
+  RestDay,
+} from '../types';
 import { AdherenceRings } from './AdherenceRings';
 import { HistoryPanel } from './HistoryPanel';
 import { ProgressPanel } from './ProgressPanel';
@@ -10,6 +16,7 @@ type Props = {
   instances: Instance[];
   library: LibraryExercise[];
   restDays: RestDay[];
+  reschedules: Reschedule[];
   today: Date;
   onBack: () => void;
   onDeleteInstance: (id: string) => void;
@@ -20,6 +27,7 @@ export function ProgressScreen({
   instances,
   library,
   restDays,
+  reschedules,
   today,
   onBack,
   onDeleteInstance,
@@ -39,6 +47,7 @@ export function ProgressScreen({
         programs={programs}
         instances={instances}
         restDays={restDays}
+        reschedules={reschedules}
         today={today}
       />
 

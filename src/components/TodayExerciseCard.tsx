@@ -1,34 +1,26 @@
 import { useState } from 'react';
 import { Check, Pencil, Trash2, X } from 'lucide-react';
 import type { Exercise, Instance, Program } from '../types';
-import {
-  cardioActivityLabel,
-  formatDistance,
-  formatDuration,
-  formatPlannedSets,
-} from '../templates';
+import { formatDuration, formatPlannedSets } from '../templates';
+import { useSettings } from '../settings';
 import { SetEditor } from './SetEditor';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { cn } from '@/lib/utils';
 
 type Props = {
-  // Optional: ad-hoc cards picked from the global catalog have no program
-  // until they're saved against one.
+  // Undefined for ad-hoc catalog picks not yet attached to any program.
   program?: Program;
   exercise: Exercise;
   todaysInstances: Instance[];
   onLog: (fields: Omit<Instance, 'id' | 'loggedAt'>) => void;
   onUpdate: (instance: Instance) => void;
   onDelete: (id: string) => void;
-  // Provided for ad-hoc cards the user actively picked. Renders an X in the
-  // header so they can back out before logging anything. Suppressed once
-  // the card has a saved instance (no more "unsaved pick" to discard).
+  // Provided for unsaved ad-hoc picks; renders an X to discard before
+  // logging. Hidden once the card has a saved instance.
   onRemove?: () => void;
-  // 'frequency' switches the card to an accent (pink/coral) treatment so it
-  // visually separates from the day-scheduled cards above it. Optionally
-  // pass a small progress label (e.g. "3 / 10 month") to render in the
-  // header.
+  // Switches to the accent treatment so frequency-driven cards visually
+  // separate from required day-scheduled cards.
   variant?: 'frequency';
   progressBadge?: string;
 };
@@ -44,9 +36,10 @@ export function TodayExerciseCard({
   variant,
   progressBadge,
 }: Props) {
+  const { weightUnit } = useSettings();
   const done = todaysInstances.length > 0;
-  // When done, default to a collapsed "logged" view; user can re-expand to
-  // log another session (e.g. "I did one more round").
+  // Once done, collapse to a "logged" view; user re-expands to log
+  // additional rounds.
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const showAdd = !done || adding;
@@ -59,34 +52,18 @@ export function TodayExerciseCard({
       return ` · goal ${formatDuration(exercise.goalDurationSeconds)}`;
     }
     if (exercise.trackingType === 'weight' && exercise.goalWeight !== undefined) {
-      return ` · goal ${exercise.goalWeight} lb`;
-    }
-    if (exercise.trackingType === 'cardio') {
-      if (
-        exercise.cardioGoalKind === 'time' &&
-        exercise.goalDurationSeconds !== undefined
-      ) {
-        return ` · goal ${formatDuration(exercise.goalDurationSeconds)}`;
-      }
-      if (
-        exercise.cardioGoalKind === 'distance' &&
-        exercise.goalDistance !== undefined &&
-        exercise.cardioUnit
-      ) {
-        return ` · goal ${formatDistance(exercise.goalDistance, exercise.cardioUnit)}`;
-      }
+      return ` · goal ${exercise.goalWeight} ${weightUnit}`;
     }
     return '';
   })();
 
   const subtitleBody = (() => {
-    if (exercise.trackingType === 'cardio') {
-      return exercise.cardioActivity
-        ? cardioActivityLabel(exercise.cardioActivity)
-        : 'cardio';
-    }
     if (exercise.plannedSets.length > 0) {
-      return `target ${formatPlannedSets(exercise.plannedSets, exercise.trackingType)}`;
+      return `target ${formatPlannedSets(
+        exercise.plannedSets,
+        exercise.trackingType,
+        weightUnit,
+      )}`;
     }
     return exercise.trackingType === 'time' ? 'time' : 'weight + reps';
   })();
@@ -96,10 +73,6 @@ export function TodayExerciseCard({
   return (
     <Card
       className={cn(
-        // Frequency cards take the accent treatment regardless of done state
-        // so they read as "extra" alongside today's required work. Otherwise
-        // the existing primary border-left fires when a session has been
-        // logged today.
         isFrequency
           ? 'border-l-[3px] border-l-accent shadow-glow-accent-sm'
           : done && 'border-l-[3px] border-l-primary shadow-glow-primary-sm',
@@ -159,7 +132,6 @@ export function TodayExerciseCard({
                       exerciseName: inst.exerciseName ?? exercise.name,
                       trackingType:
                         inst.trackingType ?? exercise.trackingType,
-                      cardioUnit: inst.cardioUnit ?? exercise.cardioUnit,
                       sets,
                       notes: notes.trim() || undefined,
                     });
@@ -222,7 +194,6 @@ export function TodayExerciseCard({
               exerciseId: exercise.id,
               exerciseName: exercise.name,
               trackingType: exercise.trackingType,
-              cardioUnit: exercise.cardioUnit,
               sets,
               notes: notes.trim() || undefined,
             });
@@ -235,14 +206,8 @@ export function TodayExerciseCard({
 }
 
 function summarizeSets(inst: Instance): string {
-  const unit = inst.cardioUnit ?? 'miles';
   return inst.sets
     .map((s) => {
-      // Cardio: distance + time on the same set. Either alone is OK.
-      if (s.distance !== undefined && s.durationSeconds !== undefined) {
-        return `${formatDistance(s.distance, unit)} · ${formatDuration(s.durationSeconds)}`;
-      }
-      if (s.distance !== undefined) return formatDistance(s.distance, unit);
       if (s.durationSeconds !== undefined) return formatDuration(s.durationSeconds);
       if (s.weight !== undefined && s.reps !== undefined)
         return `${s.weight}×${s.reps}`;

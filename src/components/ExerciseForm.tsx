@@ -1,8 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import type {
-  CardioActivity,
-  DistanceUnit,
   Exercise,
   ExerciseTag,
   PlannedSet,
@@ -14,36 +12,27 @@ import {
   visibleTagsForCategory,
 } from '../types';
 import {
-  CARDIO_ACTIVITIES,
   allowedTrackingTypesForCategory,
-  cardioActivityLabel,
-  defaultUnitForActivity,
   formatReps,
   parseDuration,
   parseReps,
   splitDuration,
-  unitOptionsForActivity,
 } from '../templates';
 import {
   isExactCatalogMatch,
   suggestExercises,
   type GlobalExercise,
 } from '../exercise-library';
+import { useSettings } from '../settings';
 import { uid } from '../storage';
 import { SchedulePicker } from './SchedulePicker';
 import { SegmentedToggle } from './SegmentedToggle';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Select } from './ui/select';
 import { cn } from '@/lib/utils';
 
 type Props = {
-  // Drives which tracking types are offered (weight+reps/time vs cardio) and
-  // which catalog suggestions surface. Cardio programs hide weight+reps;
-  // weightlifting programs hide cardio. Editing an exercise that already
-  // has an off-category trackingType preserves it as a third allowed value
-  // so we don't silently mutate the user's data.
   categoryKey: string;
   initial?: Exercise;
   onSave: (exercise: Exercise) => void;
@@ -51,9 +40,9 @@ type Props = {
 };
 
 
-// Each row holds strings for every supported tracking type; only the relevant
-// fields are submitted, the rest are inert. Using a single shape keeps state
-// transitions simple when the user toggles between weight and time.
+// Single shape with fields for both tracking types keeps switching
+// between weight and time stateless — only the relevant fields are
+// submitted, the rest are inert.
 type DraftSet = {
   weight: string;
   reps: string;
@@ -68,15 +57,9 @@ function draftFromExercise(initial?: Exercise): {
   trackingType: TrackingType;
   sets: DraftSet[];
 } {
-  // Cardio exercises don't carry plannedSets — preserve the trackingType
-  // so the form opens in the right mode.
-  if (initial?.trackingType === 'cardio') {
-    return { trackingType: 'cardio', sets: [] };
-  }
   if (!initial || initial.plannedSets.length === 0) {
     return {
       trackingType: initial?.trackingType ?? 'weight',
-      // 3 default sets — common starting point. The user can delete or add.
       sets: [
         { ...DEFAULT_WEIGHT_SET },
         { ...DEFAULT_WEIGHT_SET },
@@ -102,21 +85,16 @@ function draftFromExercise(initial?: Exercise): {
 }
 
 export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) {
-  // Allowed tracking types for this category, plus any pre-existing
-  // off-category type the user is editing (so legacy data isn't silently
-  // mutated).
-  const allowedTracking = useMemo<TrackingType[]>(() => {
-    const base = allowedTrackingTypesForCategory(categoryKey);
-    if (initial?.trackingType && !base.includes(initial.trackingType)) {
-      return [...base, initial.trackingType];
-    }
-    return base;
-  }, [categoryKey, initial?.trackingType]);
+  const { weightUnit } = useSettings();
+  const allowedTracking = useMemo<TrackingType[]>(
+    () => allowedTrackingTypesForCategory(categoryKey),
+    [categoryKey],
+  );
 
   const initialDraft = draftFromExercise(initial);
   const [name, setName] = useState(initial?.name ?? '');
-  // Schedule state — split between the two modes. Switching modes preserves
-  // the values for each so users can flip back without retyping.
+  // Split state for the two modes so flipping doesn't lose the other's
+  // values.
   const initialScheduleKind: 'weekly-days' | 'frequency' =
     initial?.schedule.kind ?? 'weekly-days';
   const [scheduleKind, setScheduleKind] = useState<
@@ -139,9 +117,6 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
       : allowedTracking[0],
   );
   const [sets, setSets] = useState<DraftSet[]>(initialDraft.sets);
-  // Strip system tags ('cardio') from initial state so the chip row only
-  // reflects user-pickable tags; the auto category tag is re-applied at
-  // save time.
   const [tags, setTags] = useState<ExerciseTag[]>(() => {
     const visible = new Set(visibleTagsForCategory(categoryKey));
     return (initial?.tags ?? []).filter((t) => visible.has(t));
@@ -154,60 +129,21 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
     const { min, sec } = splitDuration(initial.goalDurationSeconds);
     return { min: String(min), sec: String(sec) };
   });
-  // Cardio-specific state. Defaults reasonable for a fresh "Running"
-  // exercise; preserved across tracking-type toggles.
-  const [cardioActivity, setCardioActivity] = useState<CardioActivity>(
-    initial?.cardioActivity ?? 'running',
-  );
-  const [cardioUnit, setCardioUnit] = useState<DistanceUnit>(
-    initial?.cardioUnit ?? defaultUnitForActivity(initial?.cardioActivity ?? 'running'),
-  );
-  const [cardioGoalKind, setCardioGoalKind] = useState<'distance' | 'time'>(
-    initial?.cardioGoalKind ?? 'distance',
-  );
-  const [goalDistance, setGoalDistance] = useState(
-    initial?.goalDistance !== undefined ? String(initial.goalDistance) : '',
-  );
   const [error, setError] = useState<string | null>(null);
 
-  // When the user picks a different activity, snap the unit to a sensible
-  // default if their previous choice no longer applies (e.g. switching from
-  // running/miles → swimming/yards).
-  const switchActivity = (next: CardioActivity) => {
-    setCardioActivity(next);
-    const allowed = unitOptionsForActivity(next);
-    if (!allowed.includes(cardioUnit)) {
-      setCardioUnit(defaultUnitForActivity(next));
-    }
-  };
-
-  // Global-catalog suggestions for the user's current name input. We only
-  // surface them when the typed name doesn't already match a catalog entry
-  // exactly — once they've converged, the row would just be noise. Filter
-  // to entries whose trackingType is allowed in this program category so a
-  // cardio program doesn't suggest Bench Press.
   const suggestions = useMemo<GlobalExercise[]>(() => {
     if (!name.trim() || isExactCatalogMatch(name)) return [];
-    return suggestExercises(name, 8).filter((g) =>
-      allowedTracking.includes(g.trackingType),
-    ).slice(0, 3);
+    return suggestExercises(name, 8)
+      .filter((g) => allowedTracking.includes(g.trackingType))
+      .slice(0, 3);
   }, [name, allowedTracking]);
 
   const applySuggestion = (g: GlobalExercise) => {
     setName(g.name);
-    // Only keep tags the user can see for this category; the auto category
-    // tag is re-applied at save. Cardio catalog entries used to have
-    // body-region tags like 'lower' — drop them when applied to a cardio
-    // program since they aren't part of the cardio tag set.
     const visible = new Set(visibleTagsForCategory(categoryKey));
     setTags(g.tags.filter((t) => visible.has(t)));
     if (g.trackingType !== trackingType) {
       switchTracking(g.trackingType);
-    }
-    if (g.trackingType === 'cardio') {
-      if (g.cardioActivity) setCardioActivity(g.cardioActivity);
-      if (g.cardioUnit) setCardioUnit(g.cardioUnit);
-      if (g.cardioGoalKind) setCardioGoalKind(g.cardioGoalKind);
     }
   };
 
@@ -221,19 +157,11 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
     if (next === trackingType) return;
     if (!allowedTracking.includes(next)) return;
     setTrackingType(next);
-    // Reset planned sets to sensible defaults so stale values from the
-    // previous mode don't leak into validation. Cardio doesn't use planned
-    // sets in the form (the goal target is the only plan), so we clear
-    // them entirely; logging starts from a blank set.
-    if (next === 'cardio') {
-      setSets([]);
-    } else {
-      setSets([
-        { ...(next === 'time' ? DEFAULT_TIME_SET : DEFAULT_WEIGHT_SET) },
-        { ...(next === 'time' ? DEFAULT_TIME_SET : DEFAULT_WEIGHT_SET) },
-        { ...(next === 'time' ? DEFAULT_TIME_SET : DEFAULT_WEIGHT_SET) },
-      ]);
-    }
+    setSets([
+      { ...(next === 'time' ? DEFAULT_TIME_SET : DEFAULT_WEIGHT_SET) },
+      { ...(next === 'time' ? DEFAULT_TIME_SET : DEFAULT_WEIGHT_SET) },
+      { ...(next === 'time' ? DEFAULT_TIME_SET : DEFAULT_WEIGHT_SET) },
+    ]);
     setError(null);
   };
 
@@ -252,9 +180,8 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
     setSets(sets.filter((_, idx) => idx !== i));
   };
 
-  // Plain function (no FormEvent) — this component intentionally does NOT
-  // render a <form> so it can be nested inside another <form> without the
-  // submit event bubbling and triggering the parent's submit handler.
+  // Not a <form> submit handler — this component is sometimes nested
+  // inside another <form> and we don't want event bubbling.
   const submit = () => {
     setError(null);
 
@@ -264,50 +191,45 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
       return;
     }
 
-    // Cardio doesn't use planned-sets in the form (the goal target IS the
-    // plan); for weight + time we still require at least one set.
-    if (trackingType !== 'cardio' && sets.length === 0) {
+    if (sets.length === 0) {
       setError('Add at least one set.');
       return;
     }
 
     const planned: PlannedSet[] = [];
-    if (trackingType !== 'cardio') {
-      for (let i = 0; i < sets.length; i++) {
-        const s = sets[i];
-        if (trackingType === 'time') {
-          const d = parseDuration(s.min, s.sec);
-          if (d === null) {
-            setError(`Set ${i + 1}: enter a duration (min and/or sec).`);
-            return;
-          }
-          planned.push({ durationSeconds: d });
-        } else {
-          const reps = parseReps(s.reps);
-          if (!reps) {
-            setError(`Set ${i + 1}: reps must be like "5" or "8-10".`);
-            return;
-          }
-          const weightStr = s.weight.trim();
-          let weight: number | undefined;
-          if (weightStr) {
-            const w = Number(weightStr);
-            // Negative weights are allowed (e.g. assisted pull-ups: -50 lb of
-            // assistance, becoming -30 as you get stronger).
-            if (!Number.isFinite(w)) {
-              setError(`Set ${i + 1}: weight must be a number.`);
-              return;
-            }
-            weight = w;
-          }
-          planned.push({ weight, reps });
+    for (let i = 0; i < sets.length; i++) {
+      const s = sets[i];
+      if (trackingType === 'time') {
+        const d = parseDuration(s.min, s.sec);
+        if (d === null) {
+          setError(`Set ${i + 1}: enter a duration (min and/or sec).`);
+          return;
         }
+        planned.push({ durationSeconds: d });
+      } else {
+        const reps = parseReps(s.reps);
+        if (!reps) {
+          setError(`Set ${i + 1}: reps must be like "5" or "8-10".`);
+          return;
+        }
+        const weightStr = s.weight.trim();
+        let weight: number | undefined;
+        if (weightStr) {
+          const w = Number(weightStr);
+          // Negative weights are allowed (e.g. assisted pull-ups: -50 lb of
+          // assistance, becoming -30 as you get stronger).
+          if (!Number.isFinite(w)) {
+            setError(`Set ${i + 1}: weight must be a number.`);
+            return;
+          }
+          weight = w;
+        }
+        planned.push({ weight, reps });
       }
     }
 
     let goalWeightNum: number | undefined;
     let goalDurationNum: number | undefined;
-    let goalDistanceNum: number | undefined;
     if (trackingType === 'weight') {
       const goalStr = goalWeight.trim();
       if (goalStr) {
@@ -318,27 +240,8 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
         }
         goalWeightNum = g;
       }
-    } else if (trackingType === 'time') {
-      if (goalDuration.min.trim() || goalDuration.sec.trim()) {
-        const d = parseDuration(goalDuration.min, goalDuration.sec);
-        if (d === null) {
-          setError('Goal duration must be a positive time.');
-          return;
-        }
-        goalDurationNum = d;
-      }
     } else {
-      // cardio — goal value depends on goalKind. Both fields capture the
-      // user's target, but we store only the one matching the goalKind so
-      // there's a single source of truth for what to display.
-      if (cardioGoalKind === 'distance') {
-        const v = Number(goalDistance.trim());
-        if (!goalDistance.trim() || !Number.isFinite(v) || v <= 0) {
-          setError('Goal distance must be a positive number.');
-          return;
-        }
-        goalDistanceNum = v;
-      } else {
+      if (goalDuration.min.trim() || goalDuration.sec.trim()) {
         const d = parseDuration(goalDuration.min, goalDuration.sec);
         if (d === null) {
           setError('Goal duration must be a positive time.');
@@ -360,9 +263,6 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
       schedule = { kind: 'weekly-days', days };
     }
 
-    // Merge user-picked tags with the auto category tag (e.g. 'cardio' for
-    // cardio programs) so library/catalog tag resolution still classifies
-    // this exercise correctly after the program is deleted.
     const mergedTags = Array.from(
       new Set([...tags, ...autoTagsForCategory(categoryKey)]),
     );
@@ -375,10 +275,6 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
       plannedSets: planned,
       goalWeight: goalWeightNum,
       goalDurationSeconds: goalDurationNum,
-      goalDistance: goalDistanceNum,
-      cardioActivity: trackingType === 'cardio' ? cardioActivity : undefined,
-      cardioUnit: trackingType === 'cardio' ? cardioUnit : undefined,
-      cardioGoalKind: trackingType === 'cardio' ? cardioGoalKind : undefined,
       tags: mergedTags.length > 0 ? mergedTags : undefined,
     });
   };
@@ -452,12 +348,7 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
               onChange={switchTracking}
               options={allowedTracking.map((t) => ({
                 value: t,
-                label:
-                  t === 'weight'
-                    ? 'Weight + reps'
-                    : t === 'time'
-                      ? 'Time'
-                      : 'Cardio',
+                label: t === 'weight' ? 'Weight + reps' : 'Time',
               }))}
             />
           </div>
@@ -512,120 +403,6 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
         </div>
       )}
 
-      {trackingType === 'cardio' && (
-        <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-surface2/50 p-3">
-          <div className="flex flex-col gap-1.5">
-            <Label>Activity</Label>
-            <Select
-              value={cardioActivity}
-              onChange={(e) =>
-                switchActivity(e.target.value as CardioActivity)
-              }
-              aria-label="Cardio activity"
-            >
-              {CARDIO_ACTIVITIES.map((a) => (
-                <option key={a} value={a}>
-                  {cardioActivityLabel(a)}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Unit</Label>
-            <div
-              role="group"
-              aria-label="Distance unit"
-              className="flex gap-1 rounded-lg bg-surface2 p-1"
-            >
-              {unitOptionsForActivity(cardioActivity).map((u) => {
-                const active = cardioUnit === u;
-                return (
-                  <button
-                    key={u}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setCardioUnit(u)}
-                    className={cn(
-                      'flex-1 min-h-9 rounded-md px-3 py-2 text-sm font-semibold transition-colors',
-                      active
-                        ? 'bg-primary text-primary-foreground shadow-glow-primary-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {u}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Goal</Label>
-            <div
-              role="group"
-              aria-label="Goal type"
-              className="flex gap-1 rounded-lg bg-surface2 p-1"
-            >
-              {(['distance', 'time'] as const).map((k) => {
-                const active = cardioGoalKind === k;
-                return (
-                  <button
-                    key={k}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setCardioGoalKind(k)}
-                    className={cn(
-                      'flex-1 min-h-9 rounded-md px-3 py-2 text-sm font-semibold transition-colors',
-                      active
-                        ? 'bg-primary text-primary-foreground shadow-glow-primary-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {k === 'distance' ? 'Distance' : 'Time'}
-                  </button>
-                );
-              })}
-            </div>
-            {cardioGoalKind === 'distance' ? (
-              <div className="flex items-center gap-2">
-                <Input
-                  inputMode="decimal"
-                  placeholder="0"
-                  value={goalDistance}
-                  onChange={(e) => setGoalDistance(e.target.value)}
-                  className="flex-1"
-                />
-                <span className="text-sm text-muted-foreground">
-                  {cardioUnit}
-                </span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Input
-                  inputMode="numeric"
-                  placeholder="min"
-                  value={goalDuration.min}
-                  onChange={(e) =>
-                    setGoalDuration({ ...goalDuration, min: e.target.value })
-                  }
-                  className="flex-1"
-                />
-                <span className="text-muted-foreground">:</span>
-                <Input
-                  inputMode="numeric"
-                  placeholder="sec"
-                  value={goalDuration.sec}
-                  onChange={(e) =>
-                    setGoalDuration({ ...goalDuration, sec: e.target.value })
-                  }
-                  className="flex-1"
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {trackingType !== 'cardio' && (
       <div className="flex flex-col gap-1.5">
         <Label>Sets</Label>
         <div className="flex flex-col gap-2">
@@ -676,7 +453,7 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
               ) : (
                 <>
                   <Input
-                    placeholder="lb"
+                    placeholder={weightUnit}
                     value={s.weight}
                     onChange={(e) => updateSet(i, { weight: e.target.value })}
                     className="h-10 px-3 py-2"
@@ -705,11 +482,10 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
           <Plus aria-hidden /> Add set
         </Button>
       </div>
-      )}
 
       {trackingType === 'weight' && (
         <label className="flex flex-col gap-1.5">
-          <Label>Goal weight (lb, optional)</Label>
+          <Label>Goal weight ({weightUnit}, optional)</Label>
           <Input
             placeholder="—"
             value={goalWeight}

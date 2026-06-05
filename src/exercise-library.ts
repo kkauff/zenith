@@ -1,20 +1,10 @@
-// Curated catalog of common weightlifting exercises shared across all users.
-//
-// This is intentionally hardcoded rather than stored in Firestore: it's small,
-// versioned with the app, doesn't need security rules, and doesn't change
-// per-user. The app uses it for two purposes:
-//
-//   1. Autocomplete-style suggestions when a user types an exercise name —
-//      so "bnch press" surfaces "Bench Press" before the user creates a new
-//      slightly-different entry.
-//   2. Default tags + tracking type when the user picks a suggestion.
-//
-// Users can still create custom exercises that aren't in the catalog;
-// they just have to pick tags themselves.
+// Hardcoded rather than stored in Firestore — it's small, versioned with
+// the app, and doesn't change per-user. Powers autocomplete suggestions
+// and tag/tracking-type inference. Users can still create custom
+// exercises that aren't in the catalog; they just have to pick tags
+// themselves.
 
 import type {
-  CardioActivity,
-  DistanceUnit,
   Exercise,
   ExerciseTag,
   TrackingType,
@@ -23,16 +13,10 @@ import type {
 export type GlobalExercise = {
   slug: string;
   name: string;
-  // Common abbreviations / alternate names. Matched against user input
-  // alongside `name` for fuzzy lookup. Not shown in the suggestion UI.
+  // Matched alongside `name` for fuzzy lookup. Not shown in the UI.
   aliases?: string[];
   tags: ExerciseTag[];
   trackingType: TrackingType;
-  // Cardio-only — preset for catalog entries so picking one auto-fills the
-  // activity + unit choice.
-  cardioActivity?: CardioActivity;
-  cardioUnit?: DistanceUnit;
-  cardioGoalKind?: 'distance' | 'time';
 };
 
 export const GLOBAL_EXERCISES: GlobalExercise[] = [
@@ -101,22 +85,6 @@ export const GLOBAL_EXERCISES: GlobalExercise[] = [
   { slug: 'bicycle-crunch', name: 'Bicycle Crunch', tags: ['core'], trackingType: 'weight' },
   { slug: 'russian-twist', name: 'Russian Twist', tags: ['core'], trackingType: 'weight' },
   { slug: 'ab-wheel-rollout', name: 'Ab Wheel Rollout', aliases: ['ab roller'], tags: ['core'], trackingType: 'weight' },
-
-  // --- Cardio ---
-  { slug: 'running', name: 'Running', tags: ['cardio'], trackingType: 'cardio',
-    cardioActivity: 'running', cardioUnit: 'miles', cardioGoalKind: 'distance' },
-  { slug: 'treadmill-running', name: 'Treadmill Running', aliases: ['treadmill'], tags: ['cardio'], trackingType: 'cardio',
-    cardioActivity: 'treadmill-running', cardioUnit: 'miles', cardioGoalKind: 'distance' },
-  { slug: 'outdoor-bike', name: 'Outdoor Bike', aliases: ['cycling', 'road bike'], tags: ['cardio'], trackingType: 'cardio',
-    cardioActivity: 'outdoor-bike', cardioUnit: 'miles', cardioGoalKind: 'distance' },
-  { slug: 'indoor-bike', name: 'Indoor Bike', aliases: ['stationary bike', 'spin bike', 'peloton'], tags: ['cardio'], trackingType: 'cardio',
-    cardioActivity: 'indoor-bike', cardioUnit: 'miles', cardioGoalKind: 'time' },
-  { slug: 'elliptical', name: 'Elliptical', tags: ['cardio'], trackingType: 'cardio',
-    cardioActivity: 'elliptical', cardioUnit: 'miles', cardioGoalKind: 'time' },
-  { slug: 'stairmaster', name: 'Stairmaster', aliases: ['stair climber'], tags: ['cardio'], trackingType: 'cardio',
-    cardioActivity: 'stairmaster', cardioUnit: 'miles', cardioGoalKind: 'time' },
-  { slug: 'swimming', name: 'Swimming', aliases: ['swim'], tags: ['cardio'], trackingType: 'cardio',
-    cardioActivity: 'swimming', cardioUnit: 'yards', cardioGoalKind: 'distance' },
 ];
 
 // --- Fuzzy matching ------------------------------------------------------
@@ -134,7 +102,6 @@ function levenshtein(a: string, b: string): number {
   const n = b.length;
   if (m === 0) return n;
   if (n === 0) return m;
-  // Single rolling row to keep memory tiny — we don't need the full matrix.
   let prev = new Array<number>(n + 1);
   let curr = new Array<number>(n + 1);
   for (let j = 0; j <= n; j++) prev[j] = j;
@@ -149,10 +116,9 @@ function levenshtein(a: string, b: string): number {
   return prev[n];
 }
 
-// Single-pair similarity score in [0, 1]. Substring is the strongest signal,
-// followed by token overlap (handles word-order differences), then
-// Levenshtein distance (handles typos). Tuned so common gym typos like
-// "bnch press" still match "Bench Press" while gibberish doesn't.
+// Tuned so common gym typos like "bnch press" still match "Bench Press"
+// while gibberish doesn't. Substring beats token overlap beats edit
+// distance.
 function pairScore(query: string, candidate: string): number {
   const a = normalize(query);
   const b = normalize(candidate);
@@ -173,7 +139,7 @@ function pairScore(query: string, candidate: string): number {
   const dist = levenshtein(a, b);
   const maxLen = Math.max(a.length, b.length);
   const lev = 1 - dist / maxLen;
-  // Cap typo-only matches lower so a prefix match always beats a typo match.
+  // Cap typo-only matches lower so substring/token always wins.
   return lev >= 0.7 ? lev * 0.85 : 0;
 }
 
@@ -186,8 +152,6 @@ function bestScore(query: string, ex: GlobalExercise): number {
   return best;
 }
 
-// Top suggestions for a user-typed exercise name. Empty input → no
-// suggestions (we don't want to suggest before they've started typing).
 export function suggestExercises(
   query: string,
   limit = 3,
@@ -204,12 +168,8 @@ export function suggestExercises(
   return scored.slice(0, limit).map((s) => s.ex);
 }
 
-// Build a synthetic Exercise from a global-catalog entry so the home-screen
-// ad-hoc flow can render it through the same TodayExerciseCard as a
-// program-attached exercise. The synthesized exercise has no schedule and
-// no planned sets — the SetEditor handles `plannedSets: []` gracefully.
-// `id` uses the catalog slug so repeated picks of the same global produce
-// stable instance.exerciseId values.
+// `id` is the catalog slug so repeated picks share a stable
+// instance.exerciseId for grouping across ad-hoc logs.
 export function exerciseFromGlobal(g: GlobalExercise): Exercise {
   return {
     id: g.slug,
@@ -218,15 +178,9 @@ export function exerciseFromGlobal(g: GlobalExercise): Exercise {
     trackingType: g.trackingType,
     plannedSets: [],
     tags: g.tags,
-    cardioActivity: g.cardioActivity,
-    cardioUnit: g.cardioUnit,
-    cardioGoalKind: g.cardioGoalKind,
   };
 }
 
-// True when the user's typed name already matches a catalog entry exactly
-// (case-insensitive). Used to suppress the suggestion row once they've
-// converged on a name in the library.
 export function isExactCatalogMatch(name: string): boolean {
   const q = normalize(name);
   if (!q) return false;
@@ -237,11 +191,8 @@ export function isExactCatalogMatch(name: string): boolean {
   );
 }
 
-// Find a catalog entry by display name or alias (case- and punctuation-
-// insensitive). Used as a last-resort tag/metadata fallback for instances
-// whose program-exercise was custom-defined (so neither slug nor library
-// entry knows the canonical tags), but the typed name still matches a
-// catalog item.
+// Case- and punctuation-insensitive lookup. Used as a tag/metadata
+// fallback when a custom-named exercise happens to match a catalog item.
 export function findGlobalByName(name: string): GlobalExercise | undefined {
   const q = normalize(name);
   if (!q) return undefined;

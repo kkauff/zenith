@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ArrowLeft, Pencil, Plus, X } from "lucide-react";
-import type { Exercise, Program, RollupGoal } from "../types";
+import type { Exercise, Program } from "../types";
 import { ExerciseForm } from "./ExerciseForm";
 import {
   CATEGORIES,
@@ -8,8 +8,7 @@ import {
   formatPlannedSets,
   formatSchedule,
 } from "../templates";
-import { summarizeRollup, summarizeRollupSchedule } from "../rollup";
-import { RollupGoalForm } from "./RollupGoalForm";
+import { useSettings } from "../settings";
 import { Button } from "./ui/button";
 import { Card, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
@@ -21,6 +20,7 @@ type Props = {
 };
 
 export function NewProgram({ onCreate, onCancel }: Props) {
+  const { weightUnit } = useSettings();
   // Default to weightlifting since it's the only available category for now;
   // the picker will make this explicit when more open up.
   const [categoryKey, setCategoryKey] = useState<string>("weightlifting");
@@ -28,29 +28,12 @@ export function NewProgram({ onCreate, onCancel }: Props) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [rollupGoals, setRollupGoals] = useState<RollupGoal[]>([]);
-  const [addingRollup, setAddingRollup] = useState(false);
-  const [editingRollupId, setEditingRollupId] = useState<string | null>(null);
+  // New programs default to inactive so the user makes an explicit choice
+  // to bring them into the daily plan. Activating later is one tap from
+  // either My Programs or the program detail page.
+  const [active, setActive] = useState(false);
 
-  // RollupGoalForm needs a Program to read the current exercise list off
-  // of. Synthesize one from the in-progress form state.
-  const draftProgram = useMemo<Program>(
-    () => ({
-      id: "__draft__",
-      name: name || "New program",
-      categoryKey,
-      createdAt: 0,
-      exercises,
-      rollupGoals,
-    }),
-    [name, categoryKey, exercises, rollupGoals]
-  );
-
-  // Need a name plus *some* content — either an exercise or an aggregate
-  // goal. Cardio programs commonly start with just "1 hr cardio / week"
-  // and no specific exercises.
-  const canSave =
-    name.trim().length > 0 && (exercises.length > 0 || rollupGoals.length > 0);
+  const canSave = name.trim().length > 0 && exercises.length > 0;
 
   const submit = () => {
     if (!canSave) return;
@@ -58,7 +41,7 @@ export function NewProgram({ onCreate, onCancel }: Props) {
       name: name.trim(),
       categoryKey,
       exercises,
-      rollupGoals: rollupGoals.length > 0 ? rollupGoals : undefined,
+      active,
     });
   };
 
@@ -103,7 +86,7 @@ export function NewProgram({ onCreate, onCancel }: Props) {
       <Card>
         <CardTitle className="mb-5">Program name</CardTitle>
         <Input
-          placeholder="e.g. Race Prep, 5x5, Push/Pull/Legs"
+          placeholder="e.g. 5x5, Push/Pull/Legs, Hypertrophy"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
@@ -114,9 +97,7 @@ export function NewProgram({ onCreate, onCancel }: Props) {
 
         {exercises.length === 0 && !adding && (
           <p className="italic text-sm text-muted-foreground py-2 m-0">
-            {categoryKey === "cardio"
-              ? "Add a specific cardio exercise here, or skip ahead to an aggregate goal below."
-              : "Add at least one exercise to save the program."}
+            Add at least one exercise to save the program.
           </p>
         )}
 
@@ -140,7 +121,7 @@ export function NewProgram({ onCreate, onCancel }: Props) {
                 ex.goalDurationSeconds !== undefined
                   ? ` · goal ${formatDuration(ex.goalDurationSeconds)}`
                   : ex.goalWeight !== undefined
-                  ? ` · goal ${ex.goalWeight} lb`
+                  ? ` · goal ${ex.goalWeight} ${weightUnit}`
                   : "";
               return (
                 <li
@@ -153,7 +134,11 @@ export function NewProgram({ onCreate, onCancel }: Props) {
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {formatSchedule(ex.schedule)} ·{" "}
-                      {formatPlannedSets(ex.plannedSets, ex.trackingType)}
+                      {formatPlannedSets(
+                        ex.plannedSets,
+                        ex.trackingType,
+                        weightUnit,
+                      )}
                       {goal}
                     </div>
                   </div>
@@ -201,111 +186,24 @@ export function NewProgram({ onCreate, onCancel }: Props) {
         )}
       </Card>
 
-      {categoryKey === "cardio" && (
-        <Card>
-          <CardTitle className="mb-5">Cardio goals</CardTitle>
-
-          {rollupGoals.length === 0 && !addingRollup && (
-            <p className="italic text-sm text-muted-foreground py-2 m-0">
-              Aggregate cardio goals — e.g. “5 mi of Running per week” or “6 hr
-              of Cardio (Any) per week.”
-            </p>
-          )}
-
-          {rollupGoals.length > 0 && (
-            <ul className="flex flex-col gap-2 list-none m-0 p-0">
-              {rollupGoals.map((g) => {
-                if (editingRollupId === g.id) {
-                  return (
-                    <li key={g.id} className="rounded-lg bg-surface2 p-3.5">
-                      <RollupGoalForm
-                        program={draftProgram}
-                        initial={g}
-                        onSave={(updated, autoExercise) => {
-                          if (autoExercise) {
-                            setExercises([...exercises, autoExercise]);
-                          }
-                          setRollupGoals(
-                            rollupGoals.map((x) =>
-                              x.id === updated.id ? updated : x
-                            )
-                          );
-                          setEditingRollupId(null);
-                        }}
-                        onCancel={() => setEditingRollupId(null)}
-                      />
-                    </li>
-                  );
-                }
-                return (
-                  <li
-                    key={g.id}
-                    className="flex items-start gap-2 rounded-lg bg-surface2 p-3.5"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div>
-                        <strong className="font-semibold">
-                          {summarizeRollup(g, draftProgram)}
-                        </strong>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {summarizeRollupSchedule(g)}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <Button
-                        variant="secondary"
-                        size="iconSm"
-                        onClick={() => setEditingRollupId(g.id)}
-                        aria-label="Edit cardio goal"
-                      >
-                        <Pencil aria-hidden />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="iconSm"
-                        onClick={() =>
-                          setRollupGoals(
-                            rollupGoals.filter((x) => x.id !== g.id)
-                          )
-                        }
-                        aria-label="Remove cardio goal"
-                      >
-                        <X aria-hidden />
-                      </Button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          {addingRollup && (
-            <div className="mt-3 rounded-lg bg-surface2 p-3.5">
-              <RollupGoalForm
-                program={draftProgram}
-                onSave={(g, autoExercise) => {
-                  if (autoExercise) {
-                    setExercises([...exercises, autoExercise]);
-                  }
-                  setRollupGoals([...rollupGoals, g]);
-                  setAddingRollup(false);
-                }}
-                onCancel={() => setAddingRollup(false)}
-              />
-            </div>
-          )}
-
-          {!addingRollup && editingRollupId === null && (
-            <Button
-              onClick={() => setAddingRollup(true)}
-              className="mt-3 w-full"
-            >
-              <Plus aria-hidden /> Add cardio goal
-            </Button>
-          )}
-        </Card>
-      )}
+      <Card>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={active}
+            onChange={(e) => setActive(e.target.checked)}
+            className="mt-0.5 size-4 cursor-pointer accent-primary"
+          />
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-semibold">Activate now</span>
+            <span className="block text-xs text-muted-foreground">
+              Activate to add this program to your daily tasks. Leave off if
+              you're drafting it for later — you can flip it on any time from
+              My Programs.
+            </span>
+          </span>
+        </label>
+      </Card>
 
       <Button onClick={submit} disabled={!canSave} className="w-full">
         Save program

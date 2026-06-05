@@ -1,6 +1,6 @@
 import { Trash2 } from 'lucide-react';
 import type { Instance, LibraryExercise, Program } from '../types';
-import { formatDistance, formatDuration } from '../templates';
+import { formatDuration } from '../templates';
 import { resolveExerciseName } from '../instance';
 import { Button } from './ui/button';
 import { Card, CardTitle } from './ui/card';
@@ -32,10 +32,6 @@ export function HistoryPanel({
             const name =
               resolveExerciseName(inst, programs, library) ??
               'Unknown exercise';
-            // Three states for the program tag:
-            //   - matched: show the program name as a normal tag
-            //   - dangling programId (program was deleted): "Removed program"
-            //   - no programId at all (logged ad-hoc from the catalog): "Ad-hoc"
             const tag = program
               ? program.name
               : inst.programId
@@ -94,13 +90,8 @@ export function HistoryPanel({
 
 function summarizeSets(inst: Instance): string {
   if (inst.sets.length === 0) return 'No sets recorded';
-  const unit = inst.cardioUnit ?? 'miles';
   return inst.sets
     .map((s) => {
-      if (s.distance !== undefined && s.durationSeconds !== undefined) {
-        return `${formatDistance(s.distance, unit)} · ${formatDuration(s.durationSeconds)}`;
-      }
-      if (s.distance !== undefined) return formatDistance(s.distance, unit);
       if (s.durationSeconds !== undefined)
         return formatDuration(s.durationSeconds);
       if (s.weight !== undefined && s.reps !== undefined)

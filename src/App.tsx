@@ -6,20 +6,31 @@ import { NewProgram } from './components/NewProgram';
 import { ProgramDetail } from './components/ProgramDetail';
 import { ProgramsScreen } from './components/ProgramsScreen';
 import { ProgressScreen } from './components/ProgressScreen';
+import { SettingsScreen } from './components/SettingsScreen';
 import { SplashScreen } from './components/SplashScreen';
 import { Button } from './components/ui/button';
 import { Card } from './components/ui/card';
 import * as auth from './auth';
 import * as store from './storage';
 import type { AuthUser } from './auth';
-import type { Instance, LibraryExercise, Program, RestDay } from './types';
+import type {
+  Instance,
+  LibraryExercise,
+  Program,
+  Reschedule,
+  RestDay,
+  UserSettings,
+} from './types';
+import { DEFAULT_SETTINGS } from './types';
+import { SettingsProvider } from './settings';
 
 type View =
   | { kind: 'home' }
   | { kind: 'programs' }
   | { kind: 'progress' }
   | { kind: 'newProgram' }
-  | { kind: 'program'; programId: string };
+  | { kind: 'program'; programId: string }
+  | { kind: 'settings' };
 
 function NotFound({ onHome }: { onHome: () => void }) {
   return (
@@ -33,9 +44,8 @@ function NotFound({ onHome }: { onHome: () => void }) {
   );
 }
 
-// Map our internal view type onto the three nav-menu destinations so the
-// header can highlight the active one. Sub-screens (program detail, new
-// program) bucket under 'programs' since they're not menu destinations.
+// Sub-screens bucket under their parent nav destination so the header
+// highlight tracks correctly.
 function navFor(view: View): NavView {
   switch (view.kind) {
     case 'programs':
@@ -44,13 +54,12 @@ function navFor(view: View): NavView {
       return 'programs';
     case 'progress':
       return 'progress';
+    case 'settings':
     default:
       return 'home';
   }
 }
 
-// Minimum time the splash stays visible on first app open. Long enough for
-// the branding pulse to register, short enough to not feel sluggish.
 const MIN_SPLASH_MS = 1500;
 
 export default function App() {
@@ -60,20 +69,22 @@ export default function App() {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [library, setLibrary] = useState<LibraryExercise[]>([]);
   const [restDays, setRestDays] = useState<RestDay[]>([]);
+  const [reschedules, setReschedules] = useState<Reschedule[]>([]);
+  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [view, setView] = useState<View>({ kind: 'home' });
-  // Each flag flips true the first time its Firestore snapshot is delivered,
-  // so we can wait until real data is in-hand before rendering the app and
-  // avoid the "no programs" flash on cold start.
+  // Each flag flips true on its first snapshot so we can hold the splash
+  // until real data is in-hand and avoid the "no programs" flash on cold
+  // start.
   const [loaded, setLoaded] = useState({
     programs: false,
     instances: false,
     library: false,
     restDays: false,
+    reschedules: false,
+    settings: false,
   });
   const [splashElapsed, setSplashElapsed] = useState(false);
 
-  // Subscribe to Firebase auth state. Fires once on mount with the current
-  // session (or null), then again on every sign-in/sign-out.
   useEffect(() => {
     return auth.subscribeAuth((u) => {
       setUser(u);
@@ -86,27 +97,26 @@ export default function App() {
     return () => clearTimeout(t);
   }, []);
 
-  // While signed in, keep state synced with Firestore via onSnapshot. All
-  // listeners auto-fire on remote changes too — so logging on phone updates
-  // laptop and vice-versa.
   useEffect(() => {
     if (!user) {
       setPrograms([]);
       setInstances([]);
       setLibrary([]);
       setRestDays([]);
+      setReschedules([]);
+      setSettings(DEFAULT_SETTINGS);
       setLoaded({
         programs: false,
         instances: false,
         library: false,
         restDays: false,
+        reschedules: false,
+        settings: false,
       });
       setView({ kind: 'home' });
       return;
     }
-    // Idempotent backfill of the exercise library from any pre-library
-    // programs. Runs in the background; the subscriber below will pick up
-    // the writes on the next snapshot.
+    // Idempotent; the library subscriber below picks up the writes.
     store.backfillExerciseLibrary(user.sub).catch((err) => {
       console.error('Library backfill failed:', err);
     });
@@ -126,11 +136,21 @@ export default function App() {
       setRestDays(next);
       setLoaded((s) => (s.restDays ? s : { ...s, restDays: true }));
     });
+    const unsubSched = store.subscribeReschedules(user.sub, (next) => {
+      setReschedules(next);
+      setLoaded((s) => (s.reschedules ? s : { ...s, reschedules: true }));
+    });
+    const unsubSet = store.subscribeSettings(user.sub, (next) => {
+      setSettings(next);
+      setLoaded((s) => (s.settings ? s : { ...s, settings: true }));
+    });
     return () => {
       unsubP();
       unsubI();
       unsubL();
       unsubR();
+      unsubSched();
+      unsubSet();
     };
   }, [user]);
 
@@ -180,13 +200,31 @@ export default function App() {
     await store.deleteRestDay(user.sub, date);
   };
 
-  // Show the splash until: auth resolves, the minimum splash window passes,
-  // and — if signed in — all four Firestore subscriptions have delivered
-  // their first snapshot. Skip the data wait on the Login screen so signed-
-  // out users aren't held hostage by the timer past the splash window.
+  const saveReschedule = async (reschedule: Reschedule) => {
+    if (!user) return;
+    await store.saveReschedule(user.sub, reschedule);
+  };
+
+  const deleteReschedule = async (fromDate: string) => {
+    if (!user) return;
+    await store.deleteReschedule(user.sub, fromDate);
+  };
+
+  const saveSettings = async (next: UserSettings) => {
+    if (!user) return;
+    await store.saveSettings(user.sub, next);
+  };
+
+  // Signed-out users skip the data wait so they don't get held on the
+  // splash past the timer.
   const dataReady =
     !user ||
-    (loaded.programs && loaded.instances && loaded.library && loaded.restDays);
+    (loaded.programs &&
+      loaded.instances &&
+      loaded.library &&
+      loaded.restDays &&
+      loaded.reschedules &&
+      loaded.settings);
   if (!authReady || !splashElapsed || !dataReady) {
     return <SplashScreen />;
   }
@@ -207,18 +245,21 @@ export default function App() {
       <Home
         programs={programs}
         instances={instances}
-        library={library}
         restDays={restDays}
+        reschedules={reschedules}
         today={today}
         userName={user.name}
         onNew={() => setView({ kind: 'newProgram' })}
         onSeeProgress={() => setView({ kind: 'progress' })}
         onManagePrograms={() => setView({ kind: 'programs' })}
+        onOpenProgram={(programId) => setView({ kind: 'program', programId })}
         onLogInstance={addInstance}
         onUpdateInstance={updateInstance}
         onDeleteInstance={deleteInstance}
         onSaveRestDay={saveRestDay}
         onDeleteRestDay={deleteRestDay}
+        onSaveReschedule={saveReschedule}
+        onDeleteReschedule={deleteReschedule}
       />
     );
   } else if (view.kind === 'programs') {
@@ -238,6 +279,7 @@ export default function App() {
         instances={instances}
         library={library}
         restDays={restDays}
+        reschedules={reschedules}
         today={today}
         onBack={goHome}
         onDeleteInstance={deleteInstance}
@@ -248,6 +290,14 @@ export default function App() {
       <NewProgram
         onCreate={createProgram}
         onCancel={() => setView({ kind: 'programs' })}
+      />
+    );
+  } else if (view.kind === 'settings') {
+    body = (
+      <SettingsScreen
+        settings={settings}
+        onSave={saveSettings}
+        onBack={goHome}
       />
     );
   } else if (view.kind === 'program') {
@@ -261,6 +311,7 @@ export default function App() {
           userId={user.sub}
           program={program}
           instances={programInstances}
+          reschedules={reschedules}
           onBack={() => setView({ kind: 'programs' })}
           onUpdate={updateProgram}
           onDelete={() => deleteProgram(program.id)}
@@ -272,14 +323,17 @@ export default function App() {
   }
 
   return (
-    <main>
-      <AppHeader
-        user={user}
-        current={navFor(view)}
-        onNavigate={navigate}
-        onSignOut={signOut}
-      />
-      {body}
-    </main>
+    <SettingsProvider value={settings}>
+      <main>
+        <AppHeader
+          user={user}
+          current={navFor(view)}
+          onNavigate={navigate}
+          onSignOut={signOut}
+          onOpenSettings={() => setView({ kind: 'settings' })}
+        />
+        {body}
+      </main>
+    </SettingsProvider>
   );
 }

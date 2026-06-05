@@ -1,29 +1,33 @@
 import { useState } from 'react';
-import { Heart, Plus } from 'lucide-react';
+import { CalendarClock, Heart, Plus, Undo2 } from 'lucide-react';
 import type {
   Exercise,
   Instance,
-  LibraryExercise,
   Program,
+  Reschedule,
   RestDay,
 } from '../types';
 import {
+  borrowableDays,
+  dateKey,
+  daysRemainingInWeek,
   exercisesForDay,
   frequencyGoalsForDay,
   greetingFor,
   instancesOnDay,
   restDayFor,
-  rollupProgressForToday,
 } from '../today';
+import { useSettings } from '../settings';
 import {
   GLOBAL_EXERCISES,
   exerciseFromGlobal,
 } from '../exercise-library';
 import { ActiveProgramsPanel } from './ActiveProgramsPanel';
-import { ExercisePicker, type PickerOption } from './ExercisePicker';
+import { type PickerOption } from './ExercisePicker';
+import { LogAdhocPicker } from './LogAdhocPicker';
 import { ProgressSummaryPanel } from './ProgressSummaryPanel';
+import { RescheduleModal } from './RescheduleModal';
 import { RestDayModal } from './RestDayModal';
-import { RollupProgressRow } from './RollupProgressRow';
 import { TodayBox } from './TodayBox';
 import { TodayExerciseCard } from './TodayExerciseCard';
 import { Button } from './ui/button';
@@ -32,48 +36,53 @@ import { Card } from './ui/card';
 type Props = {
   programs: Program[];
   instances: Instance[];
-  library: LibraryExercise[];
   restDays: RestDay[];
+  reschedules: Reschedule[];
   today: Date;
   userName: string;
   onNew: () => void;
   onSeeProgress: () => void;
   onManagePrograms: () => void;
+  onOpenProgram: (programId: string) => void;
   onLogInstance: (fields: Omit<Instance, 'id' | 'loggedAt'>) => void;
   onUpdateInstance: (instance: Instance) => void;
   onDeleteInstance: (id: string) => void;
   onSaveRestDay: (restDay: RestDay) => void;
   onDeleteRestDay: (date: string) => void;
+  onSaveReschedule: (reschedule: Reschedule) => void;
+  onDeleteReschedule: (fromDate: string) => void;
 };
 
 export function Home({
   programs,
   instances,
-  library,
   restDays,
+  reschedules,
   today,
   userName,
   onNew,
   onSeeProgress,
   onManagePrograms,
+  onOpenProgram,
   onLogInstance,
   onUpdateInstance,
   onDeleteInstance,
   onSaveRestDay,
   onDeleteRestDay,
+  onSaveReschedule,
+  onDeleteReschedule,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [restModalOpen, setRestModalOpen] = useState(false);
-  // Exercises the user has explicitly picked from the dropdown this session.
-  // Combined with anything that was already logged ad-hoc today to decide
-  // which non-scheduled cards to render. Cleared on reload — that's fine.
+  const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
+  const { weekStartDay } = useSettings();
+  // Session-scoped — cleared on reload, which is fine since the user
+  // re-picks for each session anyway.
   const [pickedIds, setPickedIds] = useState<string[]>([]);
 
   const greeting = greetingFor(today, userName);
   const todayRestDay = restDayFor(restDays, today);
 
-  // First-time empty state — still show the greeting; just point at program
-  // creation instead of the today panel.
   if (programs.length === 0) {
     return (
       <div className="space-y-4 mt-4">
@@ -91,30 +100,57 @@ export function Home({
     );
   }
 
-  const scheduled = exercisesForDay(programs, today);
+  // Inactive programs stay in My Programs and keep their history but
+  // don't feed today's plan or adherence — they only show up in views
+  // that operate on raw historical instances.
+  const activePrograms = programs.filter((p) => p.active);
+
+  const scheduled = exercisesForDay(activePrograms, today, reschedules);
+  // Pre-reschedule view of today's weekday. The push-a-day flow only
+  // moves base-scheduled exercises, never previously pushed-in ones, so
+  // it sources from this rather than `scheduled`.
+  const baseScheduled = exercisesForDay(activePrograms, today);
   const todays = instancesOnDay(instances, today);
   const scheduledIds = new Set(scheduled.map((s) => s.exercise.id));
 
-  // Frequency goals with remaining target for the current period — these
-  // appear under the scheduled cards, sorted by urgency. Once a goal is met
-  // for the period it falls out of this list and back into the ad-hoc
-  // picker like any other non-scheduled exercise.
-  const frequencyGoals = frequencyGoalsForDay(programs, instances, today);
+  const frequencyGoals = frequencyGoalsForDay(
+    activePrograms,
+    instances,
+    today,
+    weekStartDay,
+  );
   const frequencyIds = new Set(frequencyGoals.map((f) => f.exercise.id));
 
-  // Aggregate "X amount of [tag] per day/week/month" goals. Hidden once the
-  // target's met for the relevant period.
-  const rollupViews = rollupProgressForToday(
-    programs,
+  const borrowable = borrowableDays(
+    activePrograms,
     instances,
-    library,
+    restDays,
     today,
+    reschedules,
   );
 
-  // Every (program, exercise) across all programs that isn't already shown
-  // in the day panel (scheduled or pending frequency).
+  const todayKey = dateKey(today);
+  const todayReschedule = reschedules.find((r) => r.fromDate === todayKey);
+  const canReschedule =
+    !todayRestDay &&
+    baseScheduled.length > 0 &&
+    !todayReschedule &&
+    daysRemainingInWeek(today, weekStartDay).length > 0;
+  const pushedTargetLabel = todayReschedule
+    ? (() => {
+        const [y, m, d] = todayReschedule.toDate.split('-').map(Number);
+        if (!y || !m || !d) return todayReschedule.toDate;
+        const t = new Date(y, m - 1, d);
+        return t.toLocaleDateString(undefined, {
+          weekday: 'long',
+          month: 'short',
+          day: 'numeric',
+        });
+      })()
+    : null;
+
   const programOptions: { program?: Program; exercise: Exercise }[] =
-    programs.flatMap((program) =>
+    activePrograms.flatMap((program) =>
       program.exercises
         .filter(
           (exercise) =>
@@ -123,15 +159,12 @@ export function Home({
         .map((exercise) => ({ program, exercise })),
     );
 
-  // Names already covered by a program exercise — used to dedup global
-  // catalog entries from the picker so the user doesn't see the same name
-  // twice with different program tags.
+  // Dedup the global catalog against program exercise names so the picker
+  // doesn't show the same name twice with different program tags.
   const programExerciseNames = new Set(
-    programs.flatMap((p) => p.exercises.map((e) => e.name.toLowerCase())),
+    activePrograms.flatMap((p) => p.exercises.map((e) => e.name.toLowerCase())),
   );
 
-  // Global-catalog entries the user hasn't already pulled into a program.
-  // Picking one of these logs an instance with no programId.
   const globalOptions = GLOBAL_EXERCISES.filter(
     (g) => !programExerciseNames.has(g.name.toLowerCase()),
   ).map((g) => ({
@@ -141,9 +174,8 @@ export function Home({
 
   const allAdhocOptions = [...programOptions, ...globalOptions];
 
-  // Auto-surface any exercise that's already been logged today and isn't
-  // shown above (scheduled or pending frequency), plus anything the user
-  // actively picked this session.
+  // Surface anything already logged today that isn't shown as scheduled
+  // or pending-frequency, plus this session's picks.
   const todaysExerciseIds = new Set(todays.map((i) => i.exerciseId));
   const visibleAdhocIds = new Set<string>(pickedIds);
   for (const id of todaysExerciseIds) {
@@ -167,9 +199,10 @@ export function Home({
     <div className="space-y-4 mt-4">
       <h2 className="text-2xl font-bold tracking-tight m-0">{greeting}!</h2>
       <TodayBox
-        programs={programs}
+        programs={activePrograms}
         instances={instances}
         restDays={restDays}
+        reschedules={reschedules}
         today={today}
         expanded={expanded}
         onToggle={() => setExpanded((v) => !v)}
@@ -180,17 +213,49 @@ export function Home({
       />
       {expanded && !todayRestDay && (
         <div className="space-y-3">
-          <button
-            type="button"
-            onClick={() => setRestModalOpen(true)}
-            className="group flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border/60 bg-transparent px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-rest/50 hover:text-rest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rest/40"
-          >
-            <Heart
-              aria-hidden
-              className="size-3.5 text-muted-foreground/70 group-hover:text-rest"
-            />
-            Not feeling well? Take a rest day.
-          </button>
+          {todayReschedule && pushedTargetLabel && (
+            <div className="flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-accent shadow-glow-accent-sm">
+              <CalendarClock aria-hidden className="size-3.5" />
+              <span className="flex-1">
+                Pushed today's lift to{' '}
+                <span className="font-semibold">{pushedTargetLabel}</span>.
+              </span>
+              <button
+                type="button"
+                onClick={() => onDeleteReschedule(todayReschedule.fromDate)}
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-accent/90 transition-colors hover:bg-accent/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                <Undo2 aria-hidden className="size-3" />
+                Undo
+              </button>
+            </div>
+          )}
+          {canReschedule && (
+            <button
+              type="button"
+              onClick={() => setRescheduleModalOpen(true)}
+              className="group flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border/60 bg-transparent px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-accent/50 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            >
+              <CalendarClock
+                aria-hidden
+                className="size-3.5 text-muted-foreground/70 group-hover:text-accent"
+              />
+              Reschedule? Push today's lift to another day this week.
+            </button>
+          )}
+          {!todayReschedule && (
+            <button
+              type="button"
+              onClick={() => setRestModalOpen(true)}
+              className="group flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border/60 bg-transparent px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-rest/50 hover:text-rest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rest/40"
+            >
+              <Heart
+                aria-hidden
+                className="size-3.5 text-muted-foreground/70 group-hover:text-rest"
+              />
+              Not feeling well? Take a rest day.
+            </button>
+          )}
           {scheduled.map(({ program, exercise }) => (
             <TodayExerciseCard
               key={exercise.id}
@@ -237,30 +302,35 @@ export function Home({
               }
             />
           ))}
-          {rollupViews.length > 0 && (
-            <div className="space-y-2 pt-1">
-              {rollupViews.map((v) => (
-                <RollupProgressRow
-                  key={`${v.program.id}-${v.goal.id}`}
-                  view={v}
-                />
-              ))}
-            </div>
-          )}
-          <ExercisePicker
+          <LogAdhocPicker
+            borrowable={borrowable}
             options={pickerOptions}
-            onSelect={(id) => setPickedIds((prev) => [...prev, id])}
+            onSelectExercise={(id) =>
+              setPickedIds((prev) =>
+                prev.includes(id) ? prev : [...prev, id],
+              )
+            }
+            onSelectDay={(exerciseIds) =>
+              setPickedIds((prev) =>
+                Array.from(new Set([...prev, ...exerciseIds])),
+              )
+            }
           />
         </div>
       )}
       <ProgressSummaryPanel
-        programs={programs}
+        programs={activePrograms}
         instances={instances}
         restDays={restDays}
+        reschedules={reschedules}
         today={today}
         onSeeMore={onSeeProgress}
       />
-      <ActiveProgramsPanel programs={programs} onManage={onManagePrograms} />
+      <ActiveProgramsPanel
+        programs={activePrograms}
+        onOpen={(programId) => onOpenProgram(programId)}
+        onManage={onManagePrograms}
+      />
       <RestDayModal
         open={restModalOpen}
         date={today}
@@ -270,6 +340,18 @@ export function Home({
           setRestModalOpen(false);
         }}
         onCancel={() => setRestModalOpen(false)}
+      />
+      <RescheduleModal
+        open={rescheduleModalOpen}
+        fromDate={today}
+        exercises={baseScheduled}
+        programs={activePrograms}
+        reschedules={reschedules}
+        onSave={(r) => {
+          onSaveReschedule(r);
+          setRescheduleModalOpen(false);
+        }}
+        onCancel={() => setRescheduleModalOpen(false)}
       />
     </div>
   );

@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Activity, FileText, Home as HomeIcon, LogOut, Menu } from "lucide-react";
+import {
+  Activity,
+  FileText,
+  Home as HomeIcon,
+  LogOut,
+  Menu,
+  Settings,
+} from "lucide-react";
 import type { AuthUser } from "../auth";
 import { Brand } from "./ui/brand";
 import { Button } from "./ui/button";
@@ -11,9 +18,16 @@ type Props = {
   current: NavView;
   onNavigate: (view: NavView) => void;
   onSignOut: () => void;
+  onOpenSettings: () => void;
 };
 
-export function AppHeader({ user, current, onNavigate, onSignOut }: Props) {
+export function AppHeader({
+  user,
+  current,
+  onNavigate,
+  onSignOut,
+  onOpenSettings,
+}: Props) {
   const [navOpen, setNavOpen] = useState(false);
   const [acctOpen, setAcctOpen] = useState(false);
   const navRef = useRef<HTMLDivElement>(null);
@@ -164,6 +178,18 @@ export function AppHeader({ user, current, onNavigate, onSignOut }: Props) {
                   </div>
                 </div>
               </div>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setAcctOpen(false);
+                  onOpenSettings();
+                }}
+                className="flex w-full items-center gap-2 border-b border-border/60 px-3 py-2.5 text-left text-sm text-foreground hover:bg-surface2/60 focus-visible:outline-none focus-visible:bg-surface2/60"
+              >
+                <Settings aria-hidden className="size-4 text-muted-foreground" />
+                Settings
+              </button>
               <button
                 type="button"
                 role="menuitem"
