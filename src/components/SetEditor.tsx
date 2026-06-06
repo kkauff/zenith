@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
-import type { Exercise, Instance, InstanceSet } from '../types';
+import type { Exercise, Instance, InstanceSet, RepsTarget } from '../types';
 import { parseDuration, splitDuration } from '../templates';
 import { useSettings } from '../settings';
 import { Button } from './ui/button';
@@ -23,6 +23,7 @@ type DraftSet = {
   reps: string;
   min: string;
   sec: string;
+  repsPlaceholder?: string;
 };
 
 const EMPTY_SET: DraftSet = {
@@ -31,6 +32,10 @@ const EMPTY_SET: DraftSet = {
   min: '',
   sec: '',
 };
+
+function formatRepsTarget(reps: RepsTarget): string {
+  return reps.min === reps.max ? String(reps.min) : `${reps.min}-${reps.max}`;
+}
 
 function makeDraftFromPlanned(exercise: Exercise): DraftSet[] {
   if (exercise.plannedSets.length === 0) {
@@ -45,7 +50,7 @@ function makeDraftFromPlanned(exercise: Exercise): DraftSet[] {
     return {
       ...EMPTY_SET,
       weight: s.weight !== undefined ? String(s.weight) : '',
-      reps: s.reps ? String(s.reps.min) : '',
+      repsPlaceholder: s.reps ? formatRepsTarget(s.reps) : undefined,
     };
   });
 }
@@ -178,7 +183,7 @@ export function SetEditor({
                 />
                 <Input
                   inputMode="numeric"
-                  placeholder="reps"
+                  placeholder={s.repsPlaceholder ?? 'reps'}
                   value={s.reps}
                   onChange={(e) => updateSet(i, { reps: e.target.value })}
                   className="h-10 px-3 py-2"
