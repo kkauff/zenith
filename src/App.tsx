@@ -256,6 +256,7 @@ export default function App() {
         onLogInstance={addInstance}
         onUpdateInstance={updateInstance}
         onDeleteInstance={deleteInstance}
+        onUpdateProgram={updateProgram}
         onSaveRestDay={saveRestDay}
         onDeleteRestDay={deleteRestDay}
         onSaveReschedule={saveReschedule}

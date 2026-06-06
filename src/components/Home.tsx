@@ -47,6 +47,7 @@ type Props = {
   onLogInstance: (fields: Omit<Instance, 'id' | 'loggedAt'>) => void;
   onUpdateInstance: (instance: Instance) => void;
   onDeleteInstance: (id: string) => void;
+  onUpdateProgram: (program: Program) => void;
   onSaveRestDay: (restDay: RestDay) => void;
   onDeleteRestDay: (date: string) => void;
   onSaveReschedule: (reschedule: Reschedule) => void;
@@ -67,6 +68,7 @@ export function Home({
   onLogInstance,
   onUpdateInstance,
   onDeleteInstance,
+  onUpdateProgram,
   onSaveRestDay,
   onDeleteRestDay,
   onSaveReschedule,
@@ -267,6 +269,7 @@ export function Home({
               onLog={onLogInstance}
               onUpdate={onUpdateInstance}
               onDelete={onDeleteInstance}
+              onUpdateProgram={onUpdateProgram}
             />
           ))}
           {frequencyGoals.map((g) => (
@@ -280,6 +283,7 @@ export function Home({
               onLog={onLogInstance}
               onUpdate={onUpdateInstance}
               onDelete={onDeleteInstance}
+              onUpdateProgram={onUpdateProgram}
               variant="frequency"
               progressBadge={`${g.completedInPeriod} / ${g.target} ${g.period}`}
             />
@@ -295,6 +299,7 @@ export function Home({
               onLog={onLogInstance}
               onUpdate={onUpdateInstance}
               onDelete={onDeleteInstance}
+              onUpdateProgram={onUpdateProgram}
               onRemove={() =>
                 setPickedIds((prev) =>
                   prev.filter((id) => id !== exercise.id),

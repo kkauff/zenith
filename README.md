@@ -21,6 +21,10 @@ Live at **<https://zenith-theta-puce.vercel.app/>**.
   own schedule — pinned weekdays ("Mon/Wed/Fri") or a frequency target
   ("3× per week"). Mark programs **active** to put them in your daily
   plan, or **inactive** to shelve them without losing their history.
+- **Program updates from what you actually lifted.** When a logged
+  session diverges from the plan — heavier weight, or reps outside the
+  target range — Zenith offers an "Update program?" prompt with new
+  targets pre-filled. You can tweak the suggestion before confirming.
 - **Adherence at a glance.** Day / week / month rings on the progress
   screen show how close you are to your scheduled work. A 12-week
   trend chart and weekday heatmap break it down further.
@@ -204,6 +208,12 @@ behave more like tags than containers.
 - **Log ad-hoc** — one dropdown for borrowing another weekday's full
   set (missed days bubbled to the top), or picking specific exercises
   one at a time.
+- **Update program from a logged session** — when your sets diverge
+  from the plan, an "Update program?" button surfaces after logging.
+  The modal pre-fills per-set weights from what you actually lifted;
+  if set 1's reps fell outside the rep range, every set's range shifts
+  by the same diff (set 1's deviation from the original midpoint, with
+  `min` clamped at 1). Everything is editable before you confirm.
 - **Reschedule today** — push today's exercises onto a later day this
   week. Source day stops expecting them; target day picks them up. An
   undo banner appears on the source day until the next reschedule.
@@ -361,6 +371,7 @@ src/
   today.ts               "what's scheduled today" + adherence math
   instance.ts            name / tag / tracking-type resolution for logged instances
   exercise-library.ts    hardcoded global exercise catalog + fuzzy matching
+  program-suggestion.ts  diff a logged session against plannedSets → suggested update
   index.css              mobile-first styles
   main.tsx               React entry point
   components/
@@ -369,6 +380,7 @@ src/
     Home.tsx                 home / today screen
     TodayBox.tsx             today summary card
     TodayExerciseCard.tsx    inline log card for one exercise
+    UpdateProgramModal.tsx   editable "update program from logged session" modal
     RestDayModal.tsx         rest-day form
     RescheduleModal.tsx      push-a-day picker modal
     LogAdhocPicker.tsx       unified ad-hoc picker (weekday or specific exercise)

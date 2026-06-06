@@ -1,9 +1,14 @@
 import { useState } from 'react';
 import { Check, Pencil, Trash2, X } from 'lucide-react';
-import type { Exercise, Instance, Program } from '../types';
+import type { Exercise, Instance, InstanceSet, Program } from '../types';
 import { formatDuration, formatPlannedSets } from '../templates';
 import { useSettings } from '../settings';
+import {
+  applySuggestion,
+  computeSuggestion,
+} from '../program-suggestion';
 import { SetEditor } from './SetEditor';
+import { UpdateProgramModal } from './UpdateProgramModal';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { cn } from '@/lib/utils';
@@ -19,6 +24,9 @@ type Props = {
   // Provided for unsaved ad-hoc picks; renders an X to discard before
   // logging. Hidden once the card has a saved instance.
   onRemove?: () => void;
+  // Enables the "Update program?" prompt when a logged session diverges
+  // from plannedSets. Omit for ad-hoc cards to keep the prompt hidden.
+  onUpdateProgram?: (program: Program) => void;
   // Switches to the accent treatment so frequency-driven cards visually
   // separate from required day-scheduled cards.
   variant?: 'frequency';
@@ -33,6 +41,7 @@ export function TodayExerciseCard({
   onUpdate,
   onDelete,
   onRemove,
+  onUpdateProgram,
   variant,
   progressBadge,
 }: Props) {
@@ -42,7 +51,18 @@ export function TodayExerciseCard({
   // additional rounds.
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Drives the "Update program?" prompt; cleared on confirm, cancel, or
+  // when the user starts a new "log another" round.
+  const [lastLoggedSets, setLastLoggedSets] = useState<InstanceSet[] | null>(
+    null,
+  );
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const showAdd = !done || adding;
+
+  const suggestedSets =
+    program && onUpdateProgram && lastLoggedSets
+      ? computeSuggestion(exercise.plannedSets, lastLoggedSets)
+      : null;
 
   const goalSummary = (() => {
     if (
@@ -171,13 +191,29 @@ export function TodayExerciseCard({
             ),
           )}
           {editingId === null && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setAdding(true)}
-            >
-              Log another
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setLastLoggedSets(null);
+                  setAdding(true);
+                }}
+              >
+                Log another
+              </Button>
+              {suggestedSets && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setUpdateModalOpen(true)}
+                  className="border-primary/40 text-primary hover:border-primary hover:bg-primary/10"
+                >
+                  <Pencil aria-hidden />
+                  Update program?
+                </Button>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -197,7 +233,25 @@ export function TodayExerciseCard({
               sets,
               notes: notes.trim() || undefined,
             });
+            setLastLoggedSets(sets);
             setAdding(false);
+          }}
+        />
+      )}
+      {program && onUpdateProgram && suggestedSets && (
+        <UpdateProgramModal
+          open={updateModalOpen}
+          program={program}
+          exercise={exercise}
+          suggestedSets={suggestedSets}
+          onCancel={() => {
+            setUpdateModalOpen(false);
+            setLastLoggedSets(null);
+          }}
+          onConfirm={(sets) => {
+            onUpdateProgram(applySuggestion(program, exercise.id, sets));
+            setUpdateModalOpen(false);
+            setLastLoggedSets(null);
           }}
         />
       )}
