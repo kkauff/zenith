@@ -25,7 +25,6 @@ export function Login() {
     <div className="min-h-[100dvh] flex items-center justify-center p-4">
       <div className="w-full max-w-sm rounded-lg border border-border/60 bg-card px-6 py-10 text-center flex flex-col items-center gap-5">
         <Brand as="h1" className="text-6xl leading-none m-0" />
-        <p className="text-sm text-muted-foreground m-0">See you at the top!</p>
 
         {!auth.isConfigured ? (
           <div className="w-full rounded-lg border border-border bg-surface2 p-4 text-left">

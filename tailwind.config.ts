@@ -62,7 +62,8 @@ const config: Config = {
           'Arial',
           'sans-serif',
         ],
-        display: ['Knewave Outline', 'cursive'],
+        brand: ['Comfortaa', 'sans-serif'],
+        display: ['Knewave', 'cursive'],
       },
       boxShadow: {
         'glow-primary': '0 0 24px -4px hsl(var(--primary) / 0.55)',

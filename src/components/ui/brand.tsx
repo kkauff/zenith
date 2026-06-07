@@ -1,3 +1,4 @@
+import { Dumbbell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -7,11 +8,22 @@ type Props = {
 };
 
 /**
- * Brand wordmark — renders text in Knewave Outline with a soft cyan neon glow.
- * Defaults to "Zenith" when no children are passed.
+ * Brand wordmark — "zenith" in small font, then "LIFT" with a dumbbell icon.
  */
-export function Brand({ className, as: Tag = 'span', children = 'Zenith' }: Props) {
+export function Brand({ className, as: Tag = 'span', children }: Props) {
   return (
-    <Tag className={cn('font-display select-none', className)}>{children}</Tag>
+    <Tag
+      className={cn(
+        'font-display select-none inline-flex items-baseline gap-1',
+        className,
+      )}
+    >
+      {children ?? (
+        <>
+          <span style={{ fontFamily: '"Knewave Outline", cursive' }}>LIFT</span>
+          <Dumbbell aria-hidden className="size-[0.6em] self-center" />
+        </>
+      )}
+    </Tag>
   );
 }

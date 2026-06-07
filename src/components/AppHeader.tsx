@@ -73,9 +73,6 @@ export function AppHeader({
         className="flex items-baseline gap-2 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
       >
         <Brand as="h1" className="text-3xl leading-none m-0" />
-        <span className="hidden sm:inline text-xs italic text-muted-foreground">
-          See you at the top!
-        </span>
       </button>
 
       <div className="flex items-center gap-2">
@@ -187,7 +184,10 @@ export function AppHeader({
                 }}
                 className="flex w-full items-center gap-2 border-b border-border/60 px-3 py-2.5 text-left text-sm text-foreground hover:bg-surface2/60 focus-visible:outline-none focus-visible:bg-surface2/60"
               >
-                <Settings aria-hidden className="size-4 text-muted-foreground" />
+                <Settings
+                  aria-hidden
+                  className="size-4 text-muted-foreground"
+                />
                 Settings
               </button>
               <button
