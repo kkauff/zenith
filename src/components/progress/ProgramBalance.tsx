@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { AlertTriangle, Minus, TrendingDown, TrendingUp } from 'lucide-react';
-import Model, { type Muscle } from 'react-body-highlighter';
+import Model from 'react-body-highlighter';
 import type {
   Instance,
   LibraryExercise,
@@ -10,7 +10,6 @@ import {
   BALANCE_TAGS,
   BALANCE_TAG_LABEL,
   type BalanceCallout,
-  type BalanceTag,
   type Direction,
   detectImbalances,
   muscleIntensities,
