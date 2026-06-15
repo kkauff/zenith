@@ -365,6 +365,10 @@ export function subscribeSettings(
         raw.weightUnit === 'lb' || raw.weightUnit === 'kg'
           ? raw.weightUnit
           : DEFAULT_SETTINGS.weightUnit,
+      bodyWeight:
+        typeof raw.bodyWeight === 'number' && raw.bodyWeight > 0
+          ? raw.bodyWeight
+          : undefined,
     });
   });
 }
