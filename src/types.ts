@@ -112,11 +112,15 @@ export type WeightUnit = 'lb' | 'kg';
 export type UserSettings = {
   weekStartDay: WeekStartDay;
   weightUnit: WeightUnit;
+  // Used to convert assisted-exercise weights to effective load.
+  // Stored in the user's current weightUnit.
+  bodyWeight?: number;
 };
 
 export const DEFAULT_SETTINGS: UserSettings = {
   weekStartDay: 1,
   weightUnit: 'lb',
+  bodyWeight: 150,
 };
 
 // Push-a-day record. Source date stops expecting the moved exercises;

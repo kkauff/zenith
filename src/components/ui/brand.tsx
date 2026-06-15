@@ -14,7 +14,7 @@ export function Brand({ className, as: Tag = 'span', children }: Props) {
   return (
     <Tag
       className={cn(
-        'font-display select-none inline-flex items-baseline gap-1',
+        'font-display text-glow-bio select-none inline-flex items-baseline gap-1',
         className,
       )}
     >

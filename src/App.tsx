@@ -280,10 +280,8 @@ export default function App() {
         instances={instances}
         library={library}
         restDays={restDays}
-        reschedules={reschedules}
         today={today}
         onBack={goHome}
-        onDeleteInstance={deleteInstance}
       />
     );
   } else if (view.kind === 'newProgram') {

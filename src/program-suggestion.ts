@@ -1,10 +1,33 @@
-import type { InstanceSet, PlannedSet, Program } from './types';
+import type { InstanceSet, PlannedSet, Program, TrackingType } from './types';
 
 export function computeSuggestion(
   planned: PlannedSet[],
   logged: InstanceSet[],
+  trackingType: TrackingType,
 ): PlannedSet[] | null {
   if (planned.length === 0 || planned.length !== logged.length) return null;
+
+  if (trackingType === 'time') {
+    for (const p of planned) {
+      if (p.durationSeconds === undefined) return null;
+    }
+    for (const l of logged) {
+      if (l.durationSeconds === undefined) return null;
+    }
+
+    let changed = false;
+    const updated = planned.map((p, i) => {
+      const l = logged[i];
+      if (l.durationSeconds !== p.durationSeconds) {
+        changed = true;
+        return { ...p, durationSeconds: l.durationSeconds };
+      }
+      return { ...p };
+    });
+
+    return changed ? updated : null;
+  }
+
   for (const p of planned) {
     if (p.weight === undefined || !p.reps) return null;
   }

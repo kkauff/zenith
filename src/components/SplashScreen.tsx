@@ -1,8 +1,8 @@
 import { Dumbbell } from 'lucide-react';
 
 // Full-screen pulsating dumbbell icon shown while auth/data is loading or
-// during the minimum splash window on first open. Renders in accent pink with
-// a pulsing drop-shadow glow.
+// during the minimum splash window on first open. Mirrors the favicon: cool
+// off-white stroke with a pink outer + green inner glow that pulses.
 export function SplashScreen() {
   return (
     <div
@@ -12,7 +12,7 @@ export function SplashScreen() {
     >
       <Dumbbell
         aria-hidden
-        className="splash-icon text-accent"
+        className="splash-icon text-foreground"
         size={192}
         strokeWidth={1.75}
       />

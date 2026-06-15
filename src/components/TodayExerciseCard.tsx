@@ -61,7 +61,11 @@ export function TodayExerciseCard({
 
   const suggestedSets =
     program && onUpdateProgram && lastLoggedSets
-      ? computeSuggestion(exercise.plannedSets, lastLoggedSets)
+      ? computeSuggestion(
+          exercise.plannedSets,
+          lastLoggedSets,
+          exercise.trackingType,
+        )
       : null;
 
   const goalSummary = (() => {

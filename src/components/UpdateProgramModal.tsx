@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Pencil } from 'lucide-react';
 import type { Exercise, PlannedSet, Program } from '../types';
-import { formatPlannedSets, formatReps, parseReps } from '../templates';
+import {
+  formatPlannedSets,
+  formatReps,
+  parseDuration,
+  parseReps,
+  splitDuration,
+} from '../templates';
 import { useSettings } from '../settings';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -18,13 +24,27 @@ type Props = {
 type DraftRow = {
   weight: string;
   reps: string;
+  min: string;
+  sec: string;
 };
 
-function seedFromSets(sets: PlannedSet[]): DraftRow[] {
-  return sets.map((s) => ({
-    weight: s.weight !== undefined ? String(s.weight) : '',
-    reps: s.reps ? formatReps(s.reps) : '',
-  }));
+function seedFromSets(
+  sets: PlannedSet[],
+  trackingType: Exercise['trackingType'],
+): DraftRow[] {
+  return sets.map((s) => {
+    if (trackingType === 'time') {
+      const d = s.durationSeconds ?? 0;
+      const { min, sec } = splitDuration(d);
+      return { weight: '', reps: '', min: String(min), sec: String(sec) };
+    }
+    return {
+      weight: s.weight !== undefined ? String(s.weight) : '',
+      reps: s.reps ? formatReps(s.reps) : '',
+      min: '',
+      sec: '',
+    };
+  });
 }
 
 export function UpdateProgramModal({
@@ -36,17 +56,20 @@ export function UpdateProgramModal({
   onCancel,
 }: Props) {
   const { weightUnit } = useSettings();
-  const [rows, setRows] = useState<DraftRow[]>(() => seedFromSets(suggestedSets));
+  const isTime = exercise.trackingType === 'time';
+  const [rows, setRows] = useState<DraftRow[]>(() =>
+    seedFromSets(suggestedSets, exercise.trackingType),
+  );
   const [error, setError] = useState<string | null>(null);
 
   // Reseed on each reopen so a cancel-then-reopen starts from the latest
   // suggestion rather than the last edited draft.
   useEffect(() => {
     if (open) {
-      setRows(seedFromSets(suggestedSets));
+      setRows(seedFromSets(suggestedSets, exercise.trackingType));
       setError(null);
     }
-  }, [open, suggestedSets]);
+  }, [open, suggestedSets, exercise.trackingType]);
 
   useEffect(() => {
     if (!open) return;
@@ -73,22 +96,31 @@ export function UpdateProgramModal({
     const parsed: PlannedSet[] = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
-      const reps = parseReps(r.reps);
-      if (!reps) {
-        setError(`Set ${i + 1}: reps must be like "5" or "8-12".`);
-        return;
-      }
-      const weightStr = r.weight.trim();
-      let weight: number | undefined;
-      if (weightStr) {
-        const w = Number(weightStr);
-        if (!Number.isFinite(w)) {
-          setError(`Set ${i + 1}: weight must be a number.`);
+      if (isTime) {
+        const d = parseDuration(r.min, r.sec);
+        if (d === null) {
+          setError(`Set ${i + 1}: enter a duration (min/sec).`);
           return;
         }
-        weight = w;
+        parsed.push({ durationSeconds: d });
+      } else {
+        const reps = parseReps(r.reps);
+        if (!reps) {
+          setError(`Set ${i + 1}: reps must be like "5" or "8-12".`);
+          return;
+        }
+        const weightStr = r.weight.trim();
+        let weight: number | undefined;
+        if (weightStr) {
+          const w = Number(weightStr);
+          if (!Number.isFinite(w)) {
+            setError(`Set ${i + 1}: weight must be a number.`);
+            return;
+          }
+          weight = w;
+        }
+        parsed.push({ weight, reps });
       }
-      parsed.push({ weight, reps });
     }
     onConfirm(parsed);
   };
@@ -137,8 +169,17 @@ export function UpdateProgramModal({
               style={{ gridTemplateColumns: '32px 1fr 1fr' }}
             >
               <span className="text-center">Set</span>
-              <span className="pl-1">Weight</span>
-              <span className="pl-1">Reps</span>
+              {isTime ? (
+                <>
+                  <span className="pl-1">Min</span>
+                  <span className="pl-1">Sec</span>
+                </>
+              ) : (
+                <>
+                  <span className="pl-1">Weight</span>
+                  <span className="pl-1">Reps</span>
+                </>
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               {rows.map((r, i) => (
@@ -150,18 +191,39 @@ export function UpdateProgramModal({
                   <span className="text-center text-muted-foreground font-semibold">
                     {i + 1}
                   </span>
-                  <Input
-                    placeholder={weightUnit}
-                    value={r.weight}
-                    onChange={(e) => updateRow(i, { weight: e.target.value })}
-                    className="h-9 px-2 py-1.5"
-                  />
-                  <Input
-                    placeholder="5 or 8-12"
-                    value={r.reps}
-                    onChange={(e) => updateRow(i, { reps: e.target.value })}
-                    className="h-9 px-2 py-1.5"
-                  />
+                  {isTime ? (
+                    <>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={r.min}
+                        onChange={(e) => updateRow(i, { min: e.target.value })}
+                        className="h-9 px-2 py-1.5"
+                      />
+                      <Input
+                        inputMode="numeric"
+                        placeholder="30"
+                        value={r.sec}
+                        onChange={(e) => updateRow(i, { sec: e.target.value })}
+                        className="h-9 px-2 py-1.5"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Input
+                        placeholder={weightUnit}
+                        value={r.weight}
+                        onChange={(e) => updateRow(i, { weight: e.target.value })}
+                        className="h-9 px-2 py-1.5"
+                      />
+                      <Input
+                        placeholder="5 or 8-12"
+                        value={r.reps}
+                        onChange={(e) => updateRow(i, { reps: e.target.value })}
+                        className="h-9 px-2 py-1.5"
+                      />
+                    </>
+                  )}
                 </div>
               ))}
             </div>

@@ -1,14 +1,10 @@
 import { ArrowLeft } from 'lucide-react';
-import type {
-  Instance,
-  LibraryExercise,
-  Program,
-  Reschedule,
-  RestDay,
-} from '../types';
-import { AdherenceRings } from './AdherenceRings';
-import { HistoryPanel } from './HistoryPanel';
-import { ProgressPanel } from './ProgressPanel';
+import type { Instance, LibraryExercise, Program, RestDay } from '../types';
+import { ConsistencyCalendar } from './progress/ConsistencyCalendar';
+import { LiftTimeDistribution } from './progress/LiftTimeDistribution';
+import { ProgramBalance } from './progress/ProgramBalance';
+import { StrengthProgression } from './progress/StrengthProgression';
+import { VolumeProgression } from './progress/VolumeProgression';
 import { Button } from './ui/button';
 
 type Props = {
@@ -16,10 +12,8 @@ type Props = {
   instances: Instance[];
   library: LibraryExercise[];
   restDays: RestDay[];
-  reschedules: Reschedule[];
   today: Date;
   onBack: () => void;
-  onDeleteInstance: (id: string) => void;
 };
 
 export function ProgressScreen({
@@ -27,10 +21,8 @@ export function ProgressScreen({
   instances,
   library,
   restDays,
-  reschedules,
   today,
   onBack,
-  onDeleteInstance,
 }: Props) {
   return (
     <div className="space-y-3 mt-3">
@@ -43,27 +35,11 @@ export function ProgressScreen({
         </h1>
       </header>
 
-      <AdherenceRings
-        programs={programs}
-        instances={instances}
-        restDays={restDays}
-        reschedules={reschedules}
-        today={today}
-      />
-
-      <ProgressPanel
-        programs={programs}
-        instances={instances}
-        library={library}
-        today={today}
-      />
-
-      <HistoryPanel
-        programs={programs}
-        instances={instances}
-        library={library}
-        onDelete={onDeleteInstance}
-      />
+      <VolumeProgression programs={programs} instances={instances} library={library} today={today} />
+      <StrengthProgression programs={programs} instances={instances} library={library} />
+      <ProgramBalance programs={programs} instances={instances} library={library} today={today} />
+      <ConsistencyCalendar instances={instances} restDays={restDays} today={today} />
+      <LiftTimeDistribution instances={instances} />
     </div>
   );
 }

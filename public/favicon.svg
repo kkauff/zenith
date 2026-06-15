@@ -1,15 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
     <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="pinkBlur"/>
-      <feFlood flood-color="#ff6b9d" flood-opacity="0.65" result="pinkColor"/>
-      <feComposite in="pinkColor" in2="pinkBlur" operator="in" result="pinkGlow"/>
-      <feGaussianBlur in="SourceAlpha" stdDeviation="1.5" result="cyanBlur"/>
-      <feFlood flood-color="#1de9f6" flood-opacity="0.75" result="cyanColor"/>
-      <feComposite in="cyanColor" in2="cyanBlur" operator="in" result="cyanGlow"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="violetBlur"/>
+      <feFlood flood-color="#6d57ff" flood-opacity="0.55" result="violetColor"/>
+      <feComposite in="violetColor" in2="violetBlur" operator="in" result="violetGlow"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="coralBlur"/>
+      <feFlood flood-color="#fffdb3" flood-opacity="0.65" result="coralColor"/>
+      <feComposite in="coralColor" in2="coralBlur" operator="in" result="coralGlow"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="1.5" result="greenBlur"/>
+      <feFlood flood-color="#befdb7" flood-opacity="0.75" result="greenColor"/>
+      <feComposite in="greenColor" in2="greenBlur" operator="in" result="greenGlow"/>
       <feMerge>
-        <feMergeNode in="pinkGlow"/>
-        <feMergeNode in="cyanGlow"/>
+        <feMergeNode in="violetGlow"/>
+        <feMergeNode in="coralGlow"/>
+        <feMergeNode in="greenGlow"/>
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>

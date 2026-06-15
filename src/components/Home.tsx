@@ -249,11 +249,11 @@ export function Home({
             <button
               type="button"
               onClick={() => setRestModalOpen(true)}
-              className="group flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border/60 bg-transparent px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-rest/50 hover:text-rest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rest/40"
+              className="group flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border/60 bg-transparent px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-rest/50 hover:text-rest hover:text-glow-rest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rest/40"
             >
               <Heart
                 aria-hidden
-                className="size-3.5 text-muted-foreground/70 group-hover:text-rest"
+                className="size-3.5 text-muted-foreground/70 group-hover:text-rest group-hover:drop-glow-rest"
               />
               Not feeling well? Take a rest day.
             </button>

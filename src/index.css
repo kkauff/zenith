@@ -46,23 +46,30 @@
     --popover: 218 38% 8%;
     --popover-foreground: 210 22% 92%;
 
-    --primary: 186 100% 56%;
+    /* Glow-in-the-dark pastel green (~#befdb7). Paired with pink accent and
+       yellow rest to keep the neon-trio reading. */
+    --primary: 114 95% 85%;
     --primary-foreground: 215 60% 6%;
 
     --secondary: 218 28% 13%;
     --secondary-foreground: 210 22% 92%;
 
-    --accent: 342 100% 71%;
-    --accent-foreground: 340 60% 8%;
+    /* Canonical bioluminescent tokens — the visual trio used directly by
+       the brand wordmark and the splash halo. Semantic tokens below
+       (--accent, --rest) reference these. */
+    --bio: 248 100% 67%;
+    --bio-foreground: 248 60% 8%;
+    --coral: 58 100% 85%;
+    --coral-foreground: 58 60% 8%;
 
-    /* Neon highlighter yellow for rest / sick / injury days. Hue 58°
-       sits just warm of pure 60° yellow — keeps the electric-marker feel
-       without sliding into green-yellow. Lightness is pushed up to ~64%
-       to match the brightness of the pink accent (71%) so the trio
-       (cyan / pink / yellow) read as a coherent neon palette rather
-       than a buttercup outlier. */
-    --rest: 76 100% 65%;
-    --rest-foreground: 76 60% 8%;
+    /* Tags, accent borders, and UI affordances wear the ultraviolet bio
+       color. */
+    --accent: var(--bio);
+    --accent-foreground: var(--bio-foreground);
+
+    /* Sick / injury / rest days wear the coral. */
+    --rest: var(--coral);
+    --rest-foreground: var(--coral-foreground);
 
     --muted: 218 22% 16%;
     --muted-foreground: 215 16% 65%;
@@ -72,7 +79,7 @@
 
     --border: 218 22% 18%;
     --input: 218 26% 14%;
-    --ring: 186 100% 56%;
+    --ring: 114 95% 85%;
 
     --radius: 14px;
 
@@ -133,8 +140,9 @@
       0 0 18px hsl(var(--accent) / 0.35);
   }
 
-  /* Pulsating dumbbell icon used on the loading splash. SVG icon in accent
-     pink with an animated drop-shadow glow + scale breath. */
+  /* Pulsating dumbbell icon used on the loading splash. Matches the favicon:
+     off-white stroke with a tri-color bioluminescent halo — green (primary)
+     inner core, coral (accent) mid-band, deep ultraviolet outermost. */
   .splash-icon {
     display: inline-block;
     animation: splash-icon-pulse 1.4s ease-in-out infinite;
@@ -146,15 +154,17 @@
   0%,
   100% {
     transform: scale(0.92);
-    opacity: 0.65;
-    filter: drop-shadow(0 0 6px hsl(var(--accent) / 0.5))
-      drop-shadow(0 0 14px hsl(var(--accent) / 0.25));
+    opacity: 0.7;
+    filter: drop-shadow(0 0 28px hsl(var(--bio) / 0.4))
+      drop-shadow(0 0 14px hsl(var(--coral) / 0.45))
+      drop-shadow(0 0 6px hsl(var(--primary) / 0.55));
   }
   50% {
     transform: scale(1.08);
     opacity: 1;
-    filter: drop-shadow(0 0 18px hsl(var(--accent) / 0.9))
-      drop-shadow(0 0 32px hsl(var(--accent) / 0.55));
+    filter: drop-shadow(0 0 56px hsl(var(--bio) / 0.75))
+      drop-shadow(0 0 32px hsl(var(--coral) / 0.85))
+      drop-shadow(0 0 12px hsl(var(--primary) / 0.9));
   }
 }
 
@@ -170,5 +180,16 @@
   .text-glow-rest {
     text-shadow: 0 0 6px hsl(var(--rest) / 0.55),
       0 0 16px hsl(var(--rest) / 0.3);
+  }
+  .text-glow-bio {
+    text-shadow: 0 0 6px hsl(var(--bio) / 0.7),
+      0 0 18px hsl(var(--bio) / 0.4);
+  }
+  /* SVG-friendly companion to .text-glow-rest — applies a drop-shadow filter
+     so icons get a halo to match yellow text glow (yellow lacks the natural
+     perceptual bloom that green has against dark backgrounds). */
+  .drop-glow-rest {
+    filter: drop-shadow(0 0 4px hsl(var(--rest) / 0.7))
+      drop-shadow(0 0 10px hsl(var(--rest) / 0.35));
   }
 }
