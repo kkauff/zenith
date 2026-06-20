@@ -65,15 +65,14 @@ Live at **<https://zenith-theta-puce.vercel.app/>**.
 7. **Export / import** your data as JSON at any time from a program's
    detail page — useful for backups.
 
-### How to request an account
+### Signing in
 
-Zenith is invite-only right now. To request access, **reach out to me**.
+Zenith is **open to anyone** — no invite or approval needed. Just open
+the live URL above and sign in.
 
 Sign-in uses **Google authentication only**, so you'll need a valid
-Google / Gmail account. Once I approve you, I'll add your account to
-the allowlist in the
-[Firebase Auth users console](https://console.firebase.google.com/project/zenith-88099/authentication/users)
-and you'll be able to sign in from the live URL above.
+Google / Gmail account. Your data is scoped to your own account; every
+user gets their own private, isolated set of programs and history.
 
 ### Data & privacy
 
@@ -88,15 +87,14 @@ analytics, no tracking pixels, no third-party telemetry.
   under a Firebase project I (the maintainer) operate. Data is scoped
   per-user via Firestore security rules — your records are only
   readable/writable by your own signed-in session.
-- **Who can see it:** I can see allowlisted users in the Firebase Auth
+- **Who can see it:** I can see signed-in users in the Firebase Auth
   console (names + emails) and, as the project owner, I have technical
   read access to the underlying Firestore documents. I don't routinely
   look at them, but you should know it's possible.
 - **Export / delete:** every program can be exported as JSON from its
   detail page at any time. To delete your account and all associated
   Firestore data, reach out via my GitHub profile
-  ([@kkauff](https://github.com/kkauff)) and I'll remove both the
-  allowlist entry and the data.
+  ([@kkauff](https://github.com/kkauff)) and I'll remove it.
 
 If you're not comfortable with the above, the project is MIT-licensed
 and self-hostable — see the
@@ -105,7 +103,7 @@ Firebase project so the data lives entirely under your control.
 
 ### Installing it on your phone (PWA)
 
-Once you can sign in, install Zenith to your home screen so it
+Once you're signed in, install Zenith to your home screen so it
 launches full-screen like a native app — no App Store needed.
 
 **iPhone / iPad (Safari only — Chrome on iOS can't install PWAs):**
