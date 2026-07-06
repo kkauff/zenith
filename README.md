@@ -15,12 +15,21 @@ Live at **<https://zenith-theta-puce.vercel.app/>**.
 ### What it does
 
 - **Track strength work.** Programs are made of individual exercises.
-  Most exercises log sets × reps × weight; body-hold moves (planks,
-  hangs, wall sits) log sets × held duration instead.
+  Log sets × reps × weight, held duration (planks, hangs, wall sits),
+  resistance-band color × reps, or reps alone for bodyweight moves.
 - **Programs as plans.** Each program has its own exercises with their
   own schedule — pinned weekdays ("Mon/Wed/Fri") or a frequency target
   ("3× per week"). Mark programs **active** to put them in your daily
   plan, or **inactive** to shelve them without losing their history.
+- **Warm-up and rehab, not just lifting.** Programs come in three
+  types — Weight Lifting, Warm Up, and Rehab — each color-coded, with
+  warm-ups surfaced first in the day's plan and rehab programs carrying
+  a stated focus (e.g. "right knee tracking").
+- **Swap exercises on the road.** Traveling, and the hotel gym doesn't
+  have your machine? Substitute any exercise for one that trains the
+  same movement pattern (a chest-press machine for a dumbbell bench, a
+  back squat for a goblet squat). The swap counts toward the day, so
+  your streak survives the trip.
 - **Program updates from what you actually lifted.** When a logged
   session diverges from the plan — heavier weight, or reps outside the
   target range — Zenith offers an "Update program?" prompt with new
@@ -49,7 +58,9 @@ Live at **<https://zenith-theta-puce.vercel.app/>**.
 
 3. **Log from the home screen.** "Today" shows what's scheduled. Tap
    an exercise card to log sets, then save. Use **Log ad-hoc** to pull
-   in any other weekday's set or pick individual exercises.
+   in any other weekday's set or pick individual exercises. Short on
+   equipment? Hit the **↻ substitute** button on a card to swap in an
+   exercise that trains the same movement.
 4. **Check progress** on the Progress screen. Filter the Strength
    Volume chart by tag (push / pull / legs / upper / lower / core) or
    by specific exercise.
@@ -168,6 +179,11 @@ behave more like tags than containers.
 
 ### Programs
 
+- **Three program types**, each color-coded across the app: **Weight
+  Lifting**, **Warm Up** (sorted first in the day's plan), and **Rehab**
+  (which requires a short focus, e.g. "right knee tracking", shown on
+  the program). Warm-up and rehab programs unlock band and reps-only
+  tracking in addition to weight and time.
 - Each program is **active** or **inactive**. Active programs feed
   today's plan and adherence math; inactive ones stay in *My Programs*
   (dimmed with an "Inactive" pill) and keep their full history. Toggle
@@ -183,19 +199,27 @@ behave more like tags than containers.
 - **Tracking types:**
   - `weight` — sets × reps × weight.
   - `time` — sets × held duration (planks, hangs, wall sits).
+  - `band` — resistance-band color × reps (with a free-text "Other"
+    band).
+  - `count` — reps alone, for bodyweight moves.
 - **Schedules:**
   - `weekly-days` — pinned weekdays (any subset of Sun–Sat).
   - `frequency` — N times per week / month, no specific day attached.
 - **Planned sets:** describe what you intend to do (warmups, working
   sets, rep ranges like `8-10`). The log form pre-fills from these.
-- **Hardcoded exercise catalog** with ~60 common moves: bench press,
-  squat, deadlift, lat pulldown, hammer curl, plank, dead hang, etc.
-  Fuzzy matching means "bnch press" surfaces "Bench Press"; aliases
-  like "rdl", "ohp", "pullup" all resolve.
-- **Tags:** `upper`, `lower`, `core`, `push`, `pull`, `legs`. Auto-
-  inferred from the catalog (exact alias match + fuzzy fallback) for
-  exercises that match an entry; user-overridable per-exercise from
-  the program detail page.
+- **Hardcoded exercise catalog** of common moves: bench press, squat,
+  deadlift, lat pulldown, hammer curl, plank, dead hang, etc. Fuzzy
+  matching means "bnch press" surfaces "Bench Press"; aliases like
+  "rdl", "ohp", "pullup" all resolve.
+- **Tags:** `upper`, `lower`, `core`, `push`, `pull`, `legs` (plus
+  `pre-run` / `pre-lift` for warm-ups). Auto-inferred from the catalog
+  (exact alias match + fuzzy fallback) for exercises that match an
+  entry; user-overridable per-exercise from the program detail page.
+- **Movement patterns** — a finer label (horizontal / vertical push and
+  pull, squat, hinge, hamstring-curl, with single-leg as a modifier)
+  that powers substitution: swapping only ever offers an exercise that
+  shares a pattern, and single-leg lifts stay within their own family
+  (a Bulgarian split squat won't offer a barbell back squat).
 
 ### Today screen
 
@@ -212,6 +236,11 @@ behave more like tags than containers.
   if set 1's reps fell outside the rep range, every set's range shifts
   by the same diff (set 1's deviation from the original midpoint, with
   `min` clamped at 1). Everything is editable before you confirm.
+- **Substitute an exercise** — a today-only swap for when you're short
+  on equipment. Pick from exercises sharing the same movement pattern;
+  the substitute logs against the scheduled slot, so the card still
+  reads "done" and adherence is untouched. Gone tomorrow — your saved
+  program is never edited.
 - **Reschedule today** — push today's exercises onto a later day this
   week. Source day stops expecting them; target day picks them up. An
   undo banner appears on the source day until the next reschedule.
@@ -368,7 +397,7 @@ src/
   templates.ts           categories + helpers (schedule/reps/duration parsing)
   today.ts               "what's scheduled today" + adherence math
   instance.ts            name / tag / tracking-type resolution for logged instances
-  exercise-library.ts    hardcoded global exercise catalog + fuzzy matching
+  exercise-library.ts    hardcoded exercise catalog + fuzzy matching + substitutes
   program-suggestion.ts  diff a logged session against plannedSets → suggested update
   index.css              mobile-first styles
   main.tsx               React entry point
@@ -381,6 +410,7 @@ src/
     UpdateProgramModal.tsx   editable "update program from logged session" modal
     RestDayModal.tsx         rest-day form
     RescheduleModal.tsx      push-a-day picker modal
+    SubstituteModal.tsx      movement-pattern exercise-swap picker
     LogAdhocPicker.tsx       unified ad-hoc picker (weekday or specific exercise)
     ActiveProgramsPanel.tsx  active program list on the home screen
     NewProgram.tsx           create-a-program form
