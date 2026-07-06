@@ -7,6 +7,8 @@ export function computeSuggestion(
 ): PlannedSet[] | null {
   if (planned.length === 0 || planned.length !== logged.length) return null;
 
+  if (trackingType === 'band' || trackingType === 'count') return null;
+
   if (trackingType === 'time') {
     for (const p of planned) {
       if (p.durationSeconds === undefined) return null;

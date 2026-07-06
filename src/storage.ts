@@ -79,7 +79,12 @@ function migrateExercise(raw: unknown): Exercise | null {
   if (Array.isArray(e.plannedSets)) {
     if (e.trackingType === 'cardio') return null;
     const out = { ...(e as unknown as Exercise) };
-    if (out.trackingType !== 'weight' && out.trackingType !== 'time') {
+    if (
+      out.trackingType !== 'weight' &&
+      out.trackingType !== 'time' &&
+      out.trackingType !== 'band' &&
+      out.trackingType !== 'count'
+    ) {
       out.trackingType = 'weight';
     }
     out.schedule = migrateSchedule(out.schedule);

@@ -19,7 +19,18 @@ export type RepsTarget = {
   max: number;
 };
 
-export type TrackingType = 'weight' | 'time';
+export type TrackingType = 'weight' | 'time' | 'band' | 'count';
+
+export const BAND_COLORS = [
+  'Yellow',
+  'Orange',
+  'Red',
+  'Blue',
+  'Grey',
+  'Purple',
+  'Black',
+] as const;
+export type BandColor = (typeof BAND_COLORS)[number];
 
 export const WEIGHTLIFTING_TAGS = [
   'upper',
@@ -57,6 +68,7 @@ export type PlannedSet = {
   weight?: number;
   reps?: RepsTarget;
   durationSeconds?: number;
+  bandColor?: string;
 };
 
 export type Exercise = {
@@ -138,6 +150,7 @@ export type InstanceSet = {
   weight?: number;
   reps?: number;
   durationSeconds?: number;
+  bandColor?: string;
 };
 
 // `programId` is a soft tag and can dangle after the source program is

@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import type { Exercise, Instance, InstanceSet, RepsTarget } from '../types';
+import { BAND_COLORS } from '../types';
 import { parseDuration, splitDuration } from '../templates';
 import { useSettings } from '../settings';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { Select } from './ui/select';
 
 type Props = {
   exercise: Exercise;
@@ -23,6 +25,8 @@ type DraftSet = {
   reps: string;
   min: string;
   sec: string;
+  bandColor: string;
+  bandColorOther: string;
   repsPlaceholder?: string;
 };
 
@@ -31,6 +35,8 @@ const EMPTY_SET: DraftSet = {
   reps: '',
   min: '',
   sec: '',
+  bandColor: '',
+  bandColorOther: '',
 };
 
 function formatRepsTarget(reps: RepsTarget): string {
@@ -46,6 +52,19 @@ function makeDraftFromPlanned(exercise: Exercise): DraftSet[] {
       const d = s.durationSeconds ?? 0;
       const { min, sec } = splitDuration(d);
       return { ...EMPTY_SET, min: String(min), sec: String(sec) };
+    }
+    if (exercise.trackingType === 'count') {
+      return { ...EMPTY_SET, repsPlaceholder: s.reps ? formatRepsTarget(s.reps) : undefined };
+    }
+    if (exercise.trackingType === 'band') {
+      const stored = s.bandColor ?? '';
+      const isPreset = (BAND_COLORS as readonly string[]).includes(stored);
+      return {
+        ...EMPTY_SET,
+        bandColor: isPreset ? stored : (stored ? 'Other' : ''),
+        bandColorOther: isPreset ? '' : stored,
+        repsPlaceholder: s.reps ? formatRepsTarget(s.reps) : undefined,
+      };
     }
     return {
       ...EMPTY_SET,
@@ -65,6 +84,19 @@ function makeDraftFromInstance(
       const d = s.durationSeconds ?? 0;
       const { min, sec } = splitDuration(d);
       return { ...EMPTY_SET, min: String(min), sec: String(sec) };
+    }
+    if (exercise.trackingType === 'count') {
+      return { ...EMPTY_SET, reps: s.reps !== undefined ? String(s.reps) : '' };
+    }
+    if (exercise.trackingType === 'band') {
+      const stored = s.bandColor ?? '';
+      const isPreset = (BAND_COLORS as readonly string[]).includes(stored);
+      return {
+        ...EMPTY_SET,
+        bandColor: isPreset ? stored : (stored ? 'Other' : ''),
+        bandColorOther: isPreset ? '' : stored,
+        reps: s.reps !== undefined ? String(s.reps) : '',
+      };
     }
     return {
       ...EMPTY_SET,
@@ -91,6 +123,8 @@ export function SetEditor({
   const [notes, setNotes] = useState(initial?.notes ?? '');
 
   const isTime = exercise.trackingType === 'time';
+  const isBand = exercise.trackingType === 'band';
+  const isCount = exercise.trackingType === 'count';
 
   const updateSet = (i: number, patch: Partial<DraftSet>) => {
     setSets(sets.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
@@ -112,6 +146,18 @@ export function SetEditor({
         const d = parseDuration(s.min, s.sec);
         if (d === null) continue;
         parsed.push({ durationSeconds: d });
+      } else if (isCount) {
+        const r = Number(s.reps);
+        if (!Number.isFinite(r) || r <= 0) continue;
+        parsed.push({ reps: Math.floor(r) });
+      } else if (isBand) {
+        const r = Number(s.reps);
+        if (!Number.isFinite(r) || r <= 0) continue;
+        const bandColor =
+          s.bandColor === 'Other'
+            ? s.bandColorOther.trim()
+            : s.bandColor.trim();
+        parsed.push({ reps: Math.floor(r), bandColor: bandColor || undefined });
       } else {
         const w = Number(s.weight);
         const r = Number(s.reps);
@@ -129,58 +175,25 @@ export function SetEditor({
   return (
     <>
       <div className="flex flex-col gap-2 my-2">
-        <div
-          className="grid items-center gap-2 text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold"
-          style={{ gridTemplateColumns: '36px 1fr 1fr 36px' }}
-        >
-          <span className="text-center">Set</span>
-          {isTime ? (
-            <>
-              <span className="pl-1">Min</span>
-              <span className="pl-1">Sec</span>
-            </>
-          ) : (
-            <>
-              <span className="pl-1">Weight</span>
+        {isCount ? (
+          <>
+            <div
+              className="grid items-center gap-2 text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold"
+              style={{ gridTemplateColumns: '36px 1fr 36px' }}
+            >
+              <span className="text-center">Set</span>
               <span className="pl-1">Reps</span>
-            </>
-          )}
-          <span />
-        </div>
-        {sets.map((s, i) => (
-          <div
-            key={i}
-            className="grid items-center gap-2"
-            style={{ gridTemplateColumns: '36px 1fr 1fr 36px' }}
-          >
-            <span className="text-center text-muted-foreground font-semibold">
-              {i + 1}
-            </span>
-            {isTime ? (
-              <>
-                <Input
-                  inputMode="numeric"
-                  placeholder="0"
-                  value={s.min}
-                  onChange={(e) => updateSet(i, { min: e.target.value })}
-                  className="h-10 px-3 py-2"
-                />
-                <Input
-                  inputMode="numeric"
-                  placeholder="30"
-                  value={s.sec}
-                  onChange={(e) => updateSet(i, { sec: e.target.value })}
-                  className="h-10 px-3 py-2"
-                />
-              </>
-            ) : (
-              <>
-                <Input
-                  placeholder={weightUnit}
-                  value={s.weight}
-                  onChange={(e) => updateSet(i, { weight: e.target.value })}
-                  className="h-10 px-3 py-2"
-                />
+              <span />
+            </div>
+            {sets.map((s, i) => (
+              <div
+                key={i}
+                className="grid items-center gap-2"
+                style={{ gridTemplateColumns: '36px 1fr 36px' }}
+              >
+                <span className="text-center text-muted-foreground font-semibold">
+                  {i + 1}
+                </span>
                 <Input
                   inputMode="numeric"
                   placeholder={s.repsPlaceholder ?? 'reps'}
@@ -188,19 +201,156 @@ export function SetEditor({
                   onChange={(e) => updateSet(i, { reps: e.target.value })}
                   className="h-10 px-3 py-2"
                 />
-              </>
-            )}
-            <Button
-              variant="ghost"
-              size="iconSm"
-              aria-label={`Remove set ${i + 1}`}
-              onClick={() => removeSet(i)}
-              disabled={sets.length <= 1}
+                <Button
+                  variant="ghost"
+                  size="iconSm"
+                  aria-label={`Remove set ${i + 1}`}
+                  onClick={() => removeSet(i)}
+                  disabled={sets.length <= 1}
+                >
+                  <X aria-hidden />
+                </Button>
+              </div>
+            ))}
+          </>
+        ) : isBand ? (
+          <>
+            <div
+              className="grid items-center gap-2 text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold"
+              style={{ gridTemplateColumns: '36px 1fr 1fr 36px' }}
             >
-              <X aria-hidden />
-            </Button>
-          </div>
-        ))}
+              <span className="text-center">Set</span>
+              <span className="pl-1">Band</span>
+              <span className="pl-1">Reps</span>
+              <span />
+            </div>
+            {sets.map((s, i) => (
+              <div key={i} className="space-y-1.5">
+                <div
+                  className="grid items-center gap-2"
+                  style={{ gridTemplateColumns: '36px 1fr 1fr 36px' }}
+                >
+                  <span className="text-center text-muted-foreground font-semibold">
+                    {i + 1}
+                  </span>
+                  <Select
+                    value={s.bandColor}
+                    onChange={(e) =>
+                      updateSet(i, { bandColor: e.target.value, bandColorOther: '' })
+                    }
+                  >
+                    <option value="">— pick color —</option>
+                    {BAND_COLORS.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                    <option value="Other">Other…</option>
+                  </Select>
+                  <Input
+                    inputMode="numeric"
+                    placeholder={s.repsPlaceholder ?? 'reps'}
+                    value={s.reps}
+                    onChange={(e) => updateSet(i, { reps: e.target.value })}
+                    className="h-10 px-3 py-2"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="iconSm"
+                    aria-label={`Remove set ${i + 1}`}
+                    onClick={() => removeSet(i)}
+                    disabled={sets.length <= 1}
+                  >
+                    <X aria-hidden />
+                  </Button>
+                </div>
+                {s.bandColor === 'Other' && (
+                  <div style={{ paddingLeft: 'calc(36px + 0.5rem)' }}>
+                    <Input
+                      placeholder="Describe the band…"
+                      value={s.bandColorOther}
+                      onChange={(e) => updateSet(i, { bandColorOther: e.target.value })}
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </>
+        ) : (
+          <>
+            <div
+              className="grid items-center gap-2 text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold"
+              style={{ gridTemplateColumns: '36px 1fr 1fr 36px' }}
+            >
+              <span className="text-center">Set</span>
+              {isTime ? (
+                <>
+                  <span className="pl-1">Min</span>
+                  <span className="pl-1">Sec</span>
+                </>
+              ) : (
+                <>
+                  <span className="pl-1">Weight</span>
+                  <span className="pl-1">Reps</span>
+                </>
+              )}
+              <span />
+            </div>
+            {sets.map((s, i) => (
+              <div
+                key={i}
+                className="grid items-center gap-2"
+                style={{ gridTemplateColumns: '36px 1fr 1fr 36px' }}
+              >
+                <span className="text-center text-muted-foreground font-semibold">
+                  {i + 1}
+                </span>
+                {isTime ? (
+                  <>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={s.min}
+                      onChange={(e) => updateSet(i, { min: e.target.value })}
+                      className="h-10 px-3 py-2"
+                    />
+                    <Input
+                      inputMode="numeric"
+                      placeholder="30"
+                      value={s.sec}
+                      onChange={(e) => updateSet(i, { sec: e.target.value })}
+                      className="h-10 px-3 py-2"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Input
+                      placeholder={weightUnit}
+                      value={s.weight}
+                      onChange={(e) => updateSet(i, { weight: e.target.value })}
+                      className="h-10 px-3 py-2"
+                    />
+                    <Input
+                      inputMode="numeric"
+                      placeholder={s.repsPlaceholder ?? 'reps'}
+                      value={s.reps}
+                      onChange={(e) => updateSet(i, { reps: e.target.value })}
+                      className="h-10 px-3 py-2"
+                    />
+                  </>
+                )}
+                <Button
+                  variant="ghost"
+                  size="iconSm"
+                  aria-label={`Remove set ${i + 1}`}
+                  onClick={() => removeSet(i)}
+                  disabled={sets.length <= 1}
+                >
+                  <X aria-hidden />
+                </Button>
+              </div>
+            ))}
+          </>
+        )}
       </div>
       <Button variant="secondary" size="sm" onClick={addSet}>
         <Plus aria-hidden /> Add set

@@ -24,8 +24,11 @@ export function getCategory(key: string): CategoryTemplate | undefined {
 }
 
 export function allowedTrackingTypesForCategory(
-  _categoryKey: string,
+  categoryKey: string,
 ): TrackingType[] {
+  if (categoryKey === 'warmup' || categoryKey === 'rehab') {
+    return ['count', 'band', 'weight', 'time'];
+  }
   return ['weight', 'time'];
 }
 
@@ -129,6 +132,38 @@ export function formatPlannedSets(
   weightUnit: 'lb' | 'kg' = 'lb',
 ): string {
   if (sets.length === 0) return 'No sets';
+
+  if (trackingType === 'count') {
+    const allSameReps = sets.every(
+      (s) =>
+        s.reps?.min === sets[0].reps?.min && s.reps?.max === sets[0].reps?.max,
+    );
+    if (allSameReps) {
+      const repsStr = sets[0].reps ? formatReps(sets[0].reps) : '—';
+      return `${sets.length}×${repsStr}`;
+    }
+    return sets.map((s) => (s.reps ? formatReps(s.reps) : '—')).join(', ');
+  }
+
+  if (trackingType === 'band') {
+    const allSameReps = sets.every(
+      (s) =>
+        s.reps?.min === sets[0].reps?.min && s.reps?.max === sets[0].reps?.max,
+    );
+    const allSameBand = sets.every((s) => s.bandColor === sets[0].bandColor);
+    if (allSameReps && allSameBand) {
+      const repsStr = sets[0].reps ? formatReps(sets[0].reps) : '—';
+      const band = sets[0].bandColor;
+      return band ? `${sets.length}×${repsStr} @ ${band}` : `${sets.length}×${repsStr}`;
+    }
+    return sets
+      .map((s) => {
+        const r = s.reps ? formatReps(s.reps) : '—';
+        const b = s.bandColor ?? '—';
+        return `${b}×${r}`;
+      })
+      .join(', ');
+  }
 
   if (trackingType === 'time') {
     const allSame = sets.every(
