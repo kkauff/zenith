@@ -4,13 +4,10 @@ import { cn } from '@/lib/utils';
 type Props = {
   label: ReactNode;
   children: ReactNode;
-  // Which side of the trigger the bubble sits on.
   side?: 'top' | 'bottom';
-  // Horizontal anchoring — use 'start'/'end' near a container edge so the
-  // bubble doesn't clip off screen.
+  // Anchor 'start'/'end' near a container edge so the bubble doesn't clip.
   align?: 'start' | 'center' | 'end';
-  // Extra classes for the wrapper (e.g. flex sizing when the trigger is a
-  // flex-item like a chart bar).
+  // Wrapper classes, e.g. flex sizing when the trigger is itself a flex item.
   className?: string;
 };
 

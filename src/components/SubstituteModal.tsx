@@ -7,9 +7,8 @@ import { Button } from './ui/button';
 
 type Props = {
   open: boolean;
-  // The scheduled exercise being swapped out.
   exercise: Exercise;
-  // Catalog candidates sharing a movement pattern, from substitutesFor().
+  // Candidates sharing a movement pattern, from substitutesFor().
   candidates: GlobalExercise[];
   onPick: (substitute: GlobalExercise) => void;
   onCancel: () => void;
