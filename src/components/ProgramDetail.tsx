@@ -19,7 +19,7 @@ import type {
   Program,
   Reschedule,
 } from '../types';
-import { TAG_LABEL, WEIGHTLIFTING_TAGS } from '../types';
+import { TAG_LABEL, visibleTagsForCategory } from '../types';
 import {
   formatDuration,
   formatPlannedSets,
@@ -481,10 +481,17 @@ export function ProgramDetail({
       </header>
 
       <div className="flex items-center justify-between gap-3">
-        <p className="m-0 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-          {CategoryIcon && <CategoryIcon aria-hidden className="size-4" />}
-          {category?.name ?? program.categoryKey}
-        </p>
+        <div className="flex flex-col gap-0.5">
+          <p className="m-0 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+            {CategoryIcon && <CategoryIcon aria-hidden className="size-4" />}
+            {category?.name ?? program.categoryKey}
+          </p>
+          {program.purpose && (
+            <p className="m-0 text-xs text-rehab text-glow-rehab">
+              {program.purpose}
+            </p>
+          )}
+        </div>
         <span
           aria-label={program.active ? 'Active program' : 'Inactive program'}
           className={cn(
@@ -587,27 +594,29 @@ export function ProgramDetail({
                       {formatSchedule(ex.schedule)} · {middleLine}
                       {goal}
                     </div>
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {WEIGHTLIFTING_TAGS.map((t) => {
-                        const active = exTags.has(t);
-                        return (
-                          <button
-                            key={t}
-                            type="button"
-                            aria-pressed={active}
-                            onClick={() => toggleExerciseTag(ex, t)}
-                            className={cn(
-                              'inline-flex items-center rounded border px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
-                              active
-                                ? 'border-accent/60 bg-accent/15 text-accent'
-                                : 'border-border bg-surface2 text-muted-foreground/70 hover:text-foreground hover:border-accent/40',
-                            )}
-                          >
-                            {TAG_LABEL[t]}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {visibleTagsForCategory(program.categoryKey).length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {visibleTagsForCategory(program.categoryKey).map((t) => {
+                          const active = exTags.has(t);
+                          return (
+                            <button
+                              key={t}
+                              type="button"
+                              aria-pressed={active}
+                              onClick={() => toggleExerciseTag(ex, t)}
+                              className={cn(
+                                'inline-flex items-center rounded border px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+                                active
+                                  ? 'border-accent/60 bg-accent/15 text-accent'
+                                  : 'border-border bg-surface2 text-muted-foreground/70 hover:text-foreground hover:border-accent/40',
+                              )}
+                            >
+                              {TAG_LABEL[t]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                     {last && (
                       <div className="mt-1 text-xs text-primary text-glow-primary">
                         Last: {summarizeSets(last)} ·{' '}
@@ -983,7 +992,9 @@ function summarizeSets(inst: Instance): string {
   return inst.sets
     .map((s) => {
       if (s.durationSeconds !== undefined) return formatDuration(s.durationSeconds);
+      if (s.bandColor !== undefined && s.reps !== undefined) return `${s.bandColor}×${s.reps}`;
       if (s.weight !== undefined && s.reps !== undefined) return `${s.weight}×${s.reps}`;
+      if (s.reps !== undefined) return String(s.reps);
       return '—';
     })
     .join(', ');

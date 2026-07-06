@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Pencil, Trash2, X } from 'lucide-react';
+import { Check, Pencil, Repeat, Trash2, Undo2, X } from 'lucide-react';
 import type { Exercise, Instance, InstanceSet, Program } from '../types';
 import { formatDuration, formatPlannedSets } from '../templates';
 import { useSettings } from '../settings';
@@ -7,10 +7,17 @@ import {
   applySuggestion,
   computeSuggestion,
 } from '../program-suggestion';
+import {
+  exerciseFromGlobal,
+  substitutesFor,
+  type GlobalExercise,
+} from '../exercise-library';
 import { SetEditor } from './SetEditor';
+import { SubstituteModal } from './SubstituteModal';
 import { UpdateProgramModal } from './UpdateProgramModal';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
+import { Tooltip } from './ui/tooltip';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -57,10 +64,23 @@ export function TodayExerciseCard({
     null,
   );
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  // Today-only equipment swap: while set, the log form and header reflect
+  // the substitute, but the logged instance stays attributed to this slot's
+  // exerciseId so "done" and adherence still count. Cleared after logging.
+  const [substitute, setSubstitute] = useState<GlobalExercise | null>(null);
+  const [subModalOpen, setSubModalOpen] = useState(false);
+  // Suppresses the "Update program?" prompt after a substituted log — hotel
+  // dumbbell numbers shouldn't be suggested back into the home program.
+  const [lastLoggedSubstitute, setLastLoggedSubstitute] = useState(false);
   const showAdd = !done || adding;
 
+  const candidates = substitutesFor(exercise);
+  // The exercise the log form edits against — the substitute's tracking type
+  // and (empty) planned sets when swapped, otherwise the real one.
+  const activeExercise = substitute ? exerciseFromGlobal(substitute) : exercise;
+
   const suggestedSets =
-    program && onUpdateProgram && lastLoggedSets
+    program && onUpdateProgram && lastLoggedSets && !lastLoggedSubstitute
       ? computeSuggestion(
           exercise.plannedSets,
           lastLoggedSets,
@@ -89,17 +109,35 @@ export function TodayExerciseCard({
         weightUnit,
       )}`;
     }
-    return exercise.trackingType === 'time' ? 'time' : 'weight + reps';
+    if (exercise.trackingType === 'time') return 'time';
+    if (exercise.trackingType === 'band') return 'band + reps';
+    if (exercise.trackingType === 'count') return 'reps';
+    return 'weight + reps';
   })();
 
   const isFrequency = variant === 'frequency';
 
+  const categoryBorder = program
+    ? program.categoryKey === 'warmup'
+      ? 'border-l-[3px] border-l-warmup'
+      : program.categoryKey === 'rehab'
+        ? 'border-l-[3px] border-l-rehab'
+        : 'border-l-[3px] border-l-accent'
+    : '';
+
+  const categoryGlow = program
+    ? program.categoryKey === 'warmup'
+      ? 'shadow-glow-warmup-sm'
+      : program.categoryKey === 'rehab'
+        ? 'shadow-glow-rehab-sm'
+        : 'shadow-glow-accent-sm'
+    : '';
+
   return (
     <Card
       className={cn(
-        isFrequency
-          ? 'border-l-[3px] border-l-accent shadow-glow-accent-sm'
-          : done && 'border-l-[3px] border-l-primary shadow-glow-primary-sm',
+        categoryBorder,
+        (done || isFrequency) && categoryGlow,
       )}
     >
       <div className="mb-2.5 flex items-start justify-between gap-2">
@@ -110,11 +148,15 @@ export function TodayExerciseCard({
                 aria-hidden
                 className={cn(
                   'size-4',
-                  isFrequency ? 'text-accent' : 'text-primary',
+                  program?.categoryKey === 'warmup'
+                    ? 'text-warmup'
+                    : program?.categoryKey === 'rehab'
+                      ? 'text-rehab'
+                      : 'text-accent',
                 )}
               />
             )}
-            {exercise.name}
+            {substitute ? substitute.name : exercise.name}
             {progressBadge && (
               <span className="inline-flex items-center rounded-md bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
                 {progressBadge}
@@ -122,21 +164,60 @@ export function TodayExerciseCard({
             )}
           </h2>
           <p className="m-0 text-xs text-muted-foreground">
-            {program ? `${program.name} · ` : 'Ad-hoc · '}
-            {subtitleBody}
-            {goalSummary}
+            {substitute ? (
+              <span className="inline-flex items-center gap-1 text-primary">
+                <Repeat aria-hidden className="size-3" />
+                Substituted for {exercise.name}
+              </span>
+            ) : (
+              <>
+                {program ? `${program.name} · ` : 'Ad-hoc · '}
+                {subtitleBody}
+                {goalSummary}
+              </>
+            )}
           </p>
         </div>
-        {onRemove && !done && (
-          <Button
-            variant="ghost"
-            size="iconSm"
-            aria-label={`Remove ${exercise.name}`}
-            onClick={onRemove}
-          >
-            <X aria-hidden />
-          </Button>
-        )}
+        <div className="flex items-center gap-0.5">
+          {substitute ? (
+            <Button
+              variant="ghost"
+              size="iconSm"
+              aria-label="Undo substitution"
+              onClick={() => setSubstitute(null)}
+            >
+              <Undo2 aria-hidden />
+            </Button>
+          ) : (
+            !done &&
+            candidates.length > 0 && (
+              <Tooltip
+                label="Traveling? Substitute in another exercise."
+                side="bottom"
+                align="end"
+              >
+                <Button
+                  variant="ghost"
+                  size="iconSm"
+                  aria-label={`Substitute ${exercise.name}`}
+                  onClick={() => setSubModalOpen(true)}
+                >
+                  <Repeat aria-hidden />
+                </Button>
+              </Tooltip>
+            )
+          )}
+          {onRemove && !done && (
+            <Button
+              variant="ghost"
+              size="iconSm"
+              aria-label={`Remove ${exercise.name}`}
+              onClick={onRemove}
+            >
+              <X aria-hidden />
+            </Button>
+          )}
+        </div>
       </div>
 
       {done && !adding && (
@@ -201,6 +282,7 @@ export function TodayExerciseCard({
                 size="sm"
                 onClick={() => {
                   setLastLoggedSets(null);
+                  setLastLoggedSubstitute(false);
                   setAdding(true);
                 }}
               >
@@ -224,24 +306,43 @@ export function TodayExerciseCard({
 
       {showAdd && (
         <SetEditor
-          exercise={exercise}
+          // Keyed so switching to/from a substitute resets the draft sets to
+          // the active exercise's defaults instead of reusing the prior ones.
+          key={substitute ? substitute.slug : 'original'}
+          exercise={activeExercise}
           showNotes={false}
           saveLabel={done ? 'Save another' : 'Log it'}
           onCancel={done ? () => setAdding(false) : undefined}
           onLog={(sets, notes) => {
             onLog({
               programId: program?.id,
+              // Always the slot's id so "done" + adherence count, even when
+              // a substitute was logged.
               exerciseId: exercise.id,
-              exerciseName: exercise.name,
-              trackingType: exercise.trackingType,
+              exerciseName: activeExercise.name,
+              trackingType: activeExercise.trackingType,
               sets,
               notes: notes.trim() || undefined,
             });
             setLastLoggedSets(sets);
+            setLastLoggedSubstitute(substitute !== null);
+            setSubstitute(null);
             setAdding(false);
           }}
         />
       )}
+      <SubstituteModal
+        open={subModalOpen}
+        exercise={exercise}
+        candidates={candidates}
+        onPick={(g) => {
+          setSubstitute(g);
+          setSubModalOpen(false);
+          // Expand the log form so the swapped exercise is ready to log.
+          if (done) setAdding(true);
+        }}
+        onCancel={() => setSubModalOpen(false)}
+      />
       {program && onUpdateProgram && suggestedSets && (
         <UpdateProgramModal
           open={updateModalOpen}
@@ -267,8 +368,9 @@ function summarizeSets(inst: Instance): string {
   return inst.sets
     .map((s) => {
       if (s.durationSeconds !== undefined) return formatDuration(s.durationSeconds);
-      if (s.weight !== undefined && s.reps !== undefined)
-        return `${s.weight}×${s.reps}`;
+      if (s.bandColor !== undefined && s.reps !== undefined) return `${s.bandColor}×${s.reps}`;
+      if (s.weight !== undefined && s.reps !== undefined) return `${s.weight}×${s.reps}`;
+      if (s.reps !== undefined) return String(s.reps);
       return '—';
     })
     .join(', ');

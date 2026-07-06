@@ -45,6 +45,14 @@ const config: Config = {
           DEFAULT: 'hsl(var(--rest))',
           foreground: 'hsl(var(--rest-foreground))',
         },
+        warmup: {
+          DEFAULT: 'hsl(var(--warmup))',
+          foreground: 'hsl(var(--warmup-foreground))',
+        },
+        rehab: {
+          DEFAULT: 'hsl(var(--rehab))',
+          foreground: 'hsl(var(--rehab-foreground))',
+        },
         surface2: 'hsl(var(--surface-2))',
       },
       borderRadius: {
@@ -72,6 +80,10 @@ const config: Config = {
         'glow-accent-sm': '0 0 12px -2px hsl(var(--accent) / 0.45)',
         'glow-rest': '0 0 24px -4px hsl(var(--rest) / 0.55)',
         'glow-rest-sm': '0 0 12px -2px hsl(var(--rest) / 0.45)',
+        'glow-warmup': '0 0 24px -4px hsl(var(--warmup) / 0.55)',
+        'glow-warmup-sm': '0 0 12px -2px hsl(var(--warmup) / 0.45)',
+        'glow-rehab': '0 0 24px -4px hsl(var(--rehab) / 0.55)',
+        'glow-rehab-sm': '0 0 12px -2px hsl(var(--rehab) / 0.45)',
       },
       keyframes: {
         'glow-pulse': {

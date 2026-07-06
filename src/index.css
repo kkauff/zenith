@@ -36,23 +36,23 @@
        (~92% lightness) — research on dark-mode reading at night recommends
        avoiding pure white #fff to reduce halation/eye strain. */
     --background: 215 50% 5%;
-    --foreground: 210 22% 92%;
+    --foreground: 114 75% 88%;
 
     --card: 218 38% 8%;
-    --card-foreground: 210 22% 92%;
+    --card-foreground: 114 75% 88%;
 
     --surface-2: 218 28% 13%;
 
     --popover: 218 38% 8%;
-    --popover-foreground: 210 22% 92%;
+    --popover-foreground: 114 75% 88%;
 
-    /* Glow-in-the-dark pastel green (~#befdb7). Paired with pink accent and
-       yellow rest to keep the neon-trio reading. */
+    /* Glow-in-the-dark pastel green (~#befdb7). Used as the primary accent
+       and as the base hue for all default text/foreground. */
     --primary: 114 95% 85%;
     --primary-foreground: 215 60% 6%;
 
     --secondary: 218 28% 13%;
-    --secondary-foreground: 210 22% 92%;
+    --secondary-foreground: 114 75% 88%;
 
     /* Canonical bioluminescent tokens — the visual trio used directly by
        the brand wordmark and the splash halo. Semantic tokens below
@@ -62,8 +62,14 @@
     --coral: 58 100% 85%;
     --coral-foreground: 58 60% 8%;
 
+    /* Program-type palette. Warm up = cyan, Rehab = neon coral. */
+    --warmup: 185 85% 65%;
+    --warmup-foreground: 185 60% 8%;
+    --rehab: 8 100% 70%;
+    --rehab-foreground: 8 60% 8%;
+
     /* Tags, accent borders, and UI affordances wear the ultraviolet bio
-       color. */
+       color. Weight Lifting program cards also use this. */
     --accent: var(--bio);
     --accent-foreground: var(--bio-foreground);
 
@@ -72,7 +78,7 @@
     --rest-foreground: var(--coral-foreground);
 
     --muted: 218 22% 16%;
-    --muted-foreground: 215 16% 65%;
+    --muted-foreground: 114 20% 62%;
 
     --destructive: 0 80% 65%;
     --destructive-foreground: 0 0% 100%;
@@ -185,11 +191,25 @@
     text-shadow: 0 0 6px hsl(var(--bio) / 0.7),
       0 0 18px hsl(var(--bio) / 0.4);
   }
-  /* SVG-friendly companion to .text-glow-rest — applies a drop-shadow filter
-     so icons get a halo to match yellow text glow (yellow lacks the natural
-     perceptual bloom that green has against dark backgrounds). */
+  .text-glow-warmup {
+    text-shadow: 0 0 6px hsl(var(--warmup) / 0.55),
+      0 0 16px hsl(var(--warmup) / 0.3);
+  }
+  .text-glow-rehab {
+    text-shadow: 0 0 6px hsl(var(--rehab) / 0.55),
+      0 0 16px hsl(var(--rehab) / 0.3);
+  }
+  /* SVG-friendly companions — drop-shadow filters so icons get a halo. */
   .drop-glow-rest {
     filter: drop-shadow(0 0 4px hsl(var(--rest) / 0.7))
       drop-shadow(0 0 10px hsl(var(--rest) / 0.35));
+  }
+  .drop-glow-warmup {
+    filter: drop-shadow(0 0 4px hsl(var(--warmup) / 0.7))
+      drop-shadow(0 0 10px hsl(var(--warmup) / 0.35));
+  }
+  .drop-glow-rehab {
+    filter: drop-shadow(0 0 4px hsl(var(--rehab) / 0.7))
+      drop-shadow(0 0 10px hsl(var(--rehab) / 0.35));
   }
 }

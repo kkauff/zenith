@@ -107,16 +107,22 @@ export function Home({
   // that operate on raw historical instances.
   const activePrograms = programs.filter((p) => p.active);
 
-  const scheduled = exercisesForDay(activePrograms, today, reschedules);
+  // Warmup programs always appear first so they're done before lifting.
+  const categoryOrder: Record<string, number> = { warmup: 0, weightlifting: 1, rehab: 2 };
+  const sortedActivePrograms = [...activePrograms].sort(
+    (a, b) => (categoryOrder[a.categoryKey] ?? 1) - (categoryOrder[b.categoryKey] ?? 1),
+  );
+
+  const scheduled = exercisesForDay(sortedActivePrograms, today, reschedules);
   // Pre-reschedule view of today's weekday. The push-a-day flow only
   // moves base-scheduled exercises, never previously pushed-in ones, so
   // it sources from this rather than `scheduled`.
-  const baseScheduled = exercisesForDay(activePrograms, today);
+  const baseScheduled = exercisesForDay(sortedActivePrograms, today);
   const todays = instancesOnDay(instances, today);
   const scheduledIds = new Set(scheduled.map((s) => s.exercise.id));
 
   const frequencyGoals = frequencyGoalsForDay(
-    activePrograms,
+    sortedActivePrograms,
     instances,
     today,
     weekStartDay,
@@ -124,7 +130,7 @@ export function Home({
   const frequencyIds = new Set(frequencyGoals.map((f) => f.exercise.id));
 
   const borrowable = borrowableDays(
-    activePrograms,
+    sortedActivePrograms,
     instances,
     restDays,
     today,
@@ -152,7 +158,7 @@ export function Home({
     : null;
 
   const programOptions: { program?: Program; exercise: Exercise }[] =
-    activePrograms.flatMap((program) =>
+    sortedActivePrograms.flatMap((program) =>
       program.exercises
         .filter(
           (exercise) =>
@@ -164,7 +170,7 @@ export function Home({
   // Dedup the global catalog against program exercise names so the picker
   // doesn't show the same name twice with different program tags.
   const programExerciseNames = new Set(
-    activePrograms.flatMap((p) => p.exercises.map((e) => e.name.toLowerCase())),
+    sortedActivePrograms.flatMap((p) => p.exercises.map((e) => e.name.toLowerCase())),
   );
 
   const globalOptions = GLOBAL_EXERCISES.filter(
@@ -201,7 +207,7 @@ export function Home({
     <div className="space-y-4 mt-4">
       <h2 className="text-2xl font-bold tracking-tight m-0">{greeting}!</h2>
       <TodayBox
-        programs={activePrograms}
+        programs={sortedActivePrograms}
         instances={instances}
         restDays={restDays}
         reschedules={reschedules}
@@ -324,7 +330,7 @@ export function Home({
         </div>
       )}
       <ProgressSummaryPanel
-        programs={activePrograms}
+        programs={sortedActivePrograms}
         instances={instances}
         restDays={restDays}
         reschedules={reschedules}
@@ -332,7 +338,7 @@ export function Home({
         onSeeMore={onSeeProgress}
       />
       <ActiveProgramsPanel
-        programs={activePrograms}
+        programs={sortedActivePrograms}
         onOpen={(programId) => onOpenProgram(programId)}
         onManage={onManagePrograms}
       />

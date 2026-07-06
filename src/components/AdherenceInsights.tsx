@@ -8,6 +8,7 @@ import {
 } from '../today';
 import { MultiselectDropdown } from './MultiselectDropdown';
 import { SegmentedToggle } from './SegmentedToggle';
+import { Tooltip } from './ui/tooltip';
 import { cn } from '@/lib/utils';
 
 const WEEKS = 12;
@@ -509,10 +510,13 @@ function TimeOfDayChart({ counts }: { counts: number[] }) {
           {counts.map((c, i) => {
             const h = (c / max) * 38; // px height, max ~38
             return (
-              <div
+              <Tooltip
                 key={i}
-                className="flex flex-1 flex-col items-center gap-1.5"
-                title={`${TIME_BUCKETS[i].label}: ${c} day${c === 1 ? '' : 's'}`}
+                label={`${TIME_BUCKETS[i].label}: ${c} day${c === 1 ? '' : 's'}`}
+                side="top"
+                // Anchor edge bars inward so the bubble doesn't clip off the card.
+                align={i === 0 ? 'start' : i === counts.length - 1 ? 'end' : 'center'}
+                className="flex-1 flex-col items-center gap-1.5"
               >
                 <div className="flex h-10 w-full items-end justify-center">
                   <div
@@ -526,7 +530,7 @@ function TimeOfDayChart({ counts }: { counts: number[] }) {
                 <span className="text-[10px] tabular-nums text-muted-foreground">
                   {TIME_BUCKETS[i].label}
                 </span>
-              </div>
+              </Tooltip>
             );
           })}
         </div>

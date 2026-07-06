@@ -12,6 +12,7 @@ import { useSettings } from "../settings";
 import { Button } from "./ui/button";
 import { Card, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import { Select } from "./ui/select";
 
 type Props = {
@@ -25,6 +26,7 @@ export function NewProgram({ onCreate, onCancel }: Props) {
   // the picker will make this explicit when more open up.
   const [categoryKey, setCategoryKey] = useState<string>("weightlifting");
   const [name, setName] = useState("");
+  const [purpose, setPurpose] = useState("");
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -33,7 +35,11 @@ export function NewProgram({ onCreate, onCancel }: Props) {
   // either My Programs or the program detail page.
   const [active, setActive] = useState(false);
 
-  const canSave = name.trim().length > 0 && exercises.length > 0;
+  const isRehab = categoryKey === "rehab";
+  const canSave =
+    name.trim().length > 0 &&
+    exercises.length > 0 &&
+    (!isRehab || purpose.trim().length > 0);
 
   const submit = () => {
     if (!canSave) return;
@@ -42,6 +48,7 @@ export function NewProgram({ onCreate, onCancel }: Props) {
       categoryKey,
       exercises,
       active,
+      purpose: isRehab ? purpose.trim() : undefined,
     });
   };
 
@@ -69,7 +76,10 @@ export function NewProgram({ onCreate, onCancel }: Props) {
         <CardTitle className="mb-5">Category</CardTitle>
         <Select
           value={categoryKey}
-          onChange={(e) => setCategoryKey(e.target.value)}
+          onChange={(e) => {
+            setCategoryKey(e.target.value);
+            setPurpose("");
+          }}
           aria-label="Category"
         >
           {CATEGORIES.filter((c) => c.available).map((c) => (
@@ -78,10 +88,21 @@ export function NewProgram({ onCreate, onCancel }: Props) {
             </option>
           ))}
         </Select>
-        <p className="mt-2 text-xs text-muted-foreground m-0">
-          More categories coming soon.
-        </p>
       </Card>
+
+      {isRehab && (
+        <Card>
+          <CardTitle className="mb-5">Rehab focus</CardTitle>
+          <label className="flex flex-col gap-1.5">
+            <Label>What are you rehabbing? (required)</Label>
+            <Input
+              placeholder="e.g. Right knee tracking"
+              value={purpose}
+              onChange={(e) => setPurpose(e.target.value)}
+            />
+          </label>
+        </Card>
+      )}
 
       <Card>
         <CardTitle className="mb-5">Program name</CardTitle>

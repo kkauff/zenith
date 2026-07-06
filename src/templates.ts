@@ -1,5 +1,7 @@
 import {
+  Activity,
   Dumbbell,
+  Flame,
   Salad,
   Wind,
   type LucideIcon,
@@ -15,6 +17,8 @@ export type CategoryTemplate = {
 
 export const CATEGORIES: CategoryTemplate[] = [
   { key: 'weightlifting', name: 'Weight Lifting', Icon: Dumbbell, available: true },
+  { key: 'warmup', name: 'Warm Up', Icon: Flame, available: true },
+  { key: 'rehab', name: 'Rehab', Icon: Activity, available: true },
   { key: 'nutrition', name: 'Nutrition', Icon: Salad, available: false },
   { key: 'mindfulness', name: 'Mindfulness', Icon: Wind, available: false },
 ];

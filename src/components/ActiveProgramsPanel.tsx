@@ -43,9 +43,17 @@ export function ActiveProgramsPanel({ programs, onOpen, onManage }: Props) {
                 type="button"
                 onClick={() => onOpen(p.id)}
                 aria-label={`Open ${p.name}`}
-                className="w-full flex items-center gap-3 rounded-md bg-surface2 px-3 py-2 text-left transition-colors hover:bg-surface2/70 hover:border-primary/40 border border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="w-full flex items-center gap-3 rounded-md bg-surface2 px-3 py-2 text-left transition-colors hover:bg-surface2/70 border border-transparent hover:border-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
-                <span className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary flex-shrink-0">
+                <span
+                  className={
+                    p.categoryKey === 'warmup'
+                      ? 'flex size-8 items-center justify-center rounded-md bg-warmup/10 text-warmup flex-shrink-0'
+                      : p.categoryKey === 'rehab'
+                        ? 'flex size-8 items-center justify-center rounded-md bg-rehab/10 text-rehab flex-shrink-0'
+                        : 'flex size-8 items-center justify-center rounded-md bg-accent/10 text-accent flex-shrink-0'
+                  }
+                >
                   <Icon aria-hidden className="size-4" />
                 </span>
                 <span className="flex-1 min-w-0 flex flex-col gap-0.5">

@@ -40,12 +40,63 @@ export const WEIGHTLIFTING_TAGS = [
   'pull',
   'legs',
 ] as const;
-export const EXERCISE_TAGS = WEIGHTLIFTING_TAGS;
+
+export const WARMUP_TAGS = ['upper', 'lower', 'pre-run', 'pre-lift'] as const;
+
+export const EXERCISE_TAGS = [
+  'upper',
+  'lower',
+  'core',
+  'push',
+  'pull',
+  'legs',
+  'pre-run',
+  'pre-lift',
+] as const;
 export type ExerciseTag = (typeof EXERCISE_TAGS)[number];
 
+// Movement patterns are a finer dimension than the coarse tags above:
+// they capture *how* a compound lift moves so one exercise can be
+// substituted for another sharing a pattern (e.g. a hotel gym swap).
+// Only movements that have real substitutes carry these; most isolation
+// work is left unlabeled and simply isn't offered as a swap.
+//
+// `single-leg` is a *modifier*, not a peer of the primary patterns below:
+// two exercises only substitute when they share a primary pattern AND have
+// the same single-leg status (see SINGLE_LEG / substitutesFor). That keeps a
+// Bulgarian split squat (squat + single-leg) from swapping with a bilateral
+// back squat, while still letting it swap with lunges.
+export const MOVEMENT_PATTERNS = [
+  'horizontal-push',
+  'vertical-push',
+  'horizontal-pull',
+  'vertical-pull',
+  'squat',
+  'hinge',
+  'hamstring-curl',
+  'single-leg',
+] as const;
+export type MovementPattern = (typeof MOVEMENT_PATTERNS)[number];
+
+// The unilateral modifier — see the note above.
+export const SINGLE_LEG: MovementPattern = 'single-leg';
+
+export const MOVEMENT_LABEL: Record<MovementPattern, string> = {
+  'horizontal-push': 'Horizontal push',
+  'vertical-push': 'Vertical push',
+  'horizontal-pull': 'Horizontal pull',
+  'vertical-pull': 'Vertical pull',
+  squat: 'Squat',
+  hinge: 'Hinge',
+  'hamstring-curl': 'Hamstring curl',
+  'single-leg': 'Single leg',
+};
+
 export function visibleTagsForCategory(
-  _categoryKey: string,
+  categoryKey: string,
 ): readonly ExerciseTag[] {
+  if (categoryKey === 'warmup') return WARMUP_TAGS;
+  if (categoryKey === 'rehab') return [] as ExerciseTag[];
   return WEIGHTLIFTING_TAGS;
 }
 
@@ -60,6 +111,8 @@ export const TAG_LABEL: Record<ExerciseTag, string> = {
   push: 'Push',
   pull: 'Pull',
   legs: 'Legs',
+  'pre-run': 'Pre-run',
+  'pre-lift': 'Pre-lift',
 };
 
 // Only the fields matching the parent exercise's `trackingType` are
@@ -80,6 +133,7 @@ export type Exercise = {
   goalWeight?: number;
   goalDurationSeconds?: number;
   tags?: ExerciseTag[];
+  movements?: MovementPattern[];
 };
 
 export type Program = {
@@ -92,6 +146,8 @@ export type Program = {
   // Historical instances still count toward progress charts and history.
   active: boolean;
   exercises: Exercise[];
+  // Required for rehab programs — describes the rehabilitation goal.
+  purpose?: string;
 };
 
 // Persistent mirror of every exercise that has ever lived in a program.
