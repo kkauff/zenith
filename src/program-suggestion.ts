@@ -1,4 +1,11 @@
-import type { InstanceSet, PlannedSet, Program, TrackingType } from './types';
+import type {
+  Exercise,
+  InstanceSet,
+  PlannedSet,
+  Program,
+  RepsTarget,
+  TrackingType,
+} from './types';
 
 export function computeSuggestion(
   planned: PlannedSet[],
@@ -79,4 +86,45 @@ export function applySuggestion(
       e.id === exerciseId ? { ...e, plannedSets: updatedSets } : e,
     ),
   };
+}
+
+// Adds `dow` (JS getDay 0–6) to a weekly-days exercise, keeping days
+// sorted and deduped. Non-weekly-days exercises are left untouched.
+export function scheduleExerciseOnDay(
+  program: Program,
+  exerciseId: string,
+  dow: number,
+): Program {
+  return {
+    ...program,
+    exercises: program.exercises.map((e) => {
+      if (e.id !== exerciseId || e.schedule.kind !== 'weekly-days') return e;
+      if (e.schedule.days.includes(dow)) return e;
+      const days = [...e.schedule.days, dow].sort((a, b) => a - b);
+      return { ...e, schedule: { ...e.schedule, days } };
+    }),
+  };
+}
+
+export function addExerciseToProgram(
+  program: Program,
+  exercise: Exercise,
+): Program {
+  return { ...program, exercises: [...program.exercises, exercise] };
+}
+
+// Turns logged sets into planned targets; a fixed rep count becomes a
+// min === max range.
+export function plannedFromInstanceSets(
+  sets: InstanceSet[],
+  trackingType: TrackingType,
+): PlannedSet[] {
+  return sets.map((s) => {
+    const reps: RepsTarget | undefined =
+      s.reps !== undefined ? { min: s.reps, max: s.reps } : undefined;
+    if (trackingType === 'time') return { durationSeconds: s.durationSeconds };
+    if (trackingType === 'band') return { bandColor: s.bandColor, reps };
+    if (trackingType === 'count') return { reps };
+    return { weight: s.weight, reps };
+  });
 }

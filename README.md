@@ -236,6 +236,11 @@ behave more like tags than containers.
   if set 1's reps fell outside the rep range, every set's range shifts
   by the same diff (set 1's deviation from the original midpoint, with
   `min` clamped at 1). Everything is editable before you confirm.
+- **Add to program from an ad-hoc log** — after logging an ad-hoc
+  exercise, an "Add to program?" button offers to make it recurring. If
+  the exercise already lives in a program, it's scheduled on today's
+  weekday there; if it came from the catalog, a picker adds it to the
+  program you choose, seeding its planned sets from what you just logged.
 - **Substitute an exercise** — a today-only swap for when you're short
   on equipment. Pick from exercises sharing the same movement pattern;
   the substitute logs against the scheduled slot, so the card still
@@ -411,6 +416,7 @@ src/
     RestDayModal.tsx         rest-day form
     RescheduleModal.tsx      push-a-day picker modal
     SubstituteModal.tsx      movement-pattern exercise-swap picker
+    AddToProgramModal.tsx    program picker for adding an ad-hoc log to a program
     LogAdhocPicker.tsx       unified ad-hoc picker (weekday or specific exercise)
     ActiveProgramsPanel.tsx  active program list on the home screen
     NewProgram.tsx           create-a-program form

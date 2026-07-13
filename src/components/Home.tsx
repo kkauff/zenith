@@ -22,7 +22,13 @@ import {
   GLOBAL_EXERCISES,
   exerciseFromGlobal,
 } from '../exercise-library';
+import {
+  addExerciseToProgram,
+  plannedFromInstanceSets,
+  scheduleExerciseOnDay,
+} from '../program-suggestion';
 import { ActiveProgramsPanel } from './ActiveProgramsPanel';
+import { AddToProgramModal } from './AddToProgramModal';
 import { type PickerOption } from './ExercisePicker';
 import { LogAdhocPicker } from './LogAdhocPicker';
 import { ProgressSummaryPanel } from './ProgressSummaryPanel';
@@ -81,6 +87,9 @@ export function Home({
   // Session-scoped — cleared on reload, which is fine since the user
   // re-picks for each session anyway.
   const [pickedIds, setPickedIds] = useState<string[]>([]);
+  // Whole-day borrows, kept apart so "Add to program?" can skip them.
+  const [dayPickedIds, setDayPickedIds] = useState<string[]>([]);
+  const [addToProgramFor, setAddToProgramFor] = useState<Exercise | null>(null);
 
   const greeting = greetingFor(today, userName);
   const todayRestDay = restDayFor(restDays, today);
@@ -138,6 +147,8 @@ export function Home({
   );
 
   const todayKey = dateKey(today);
+  const todayDow = today.getDay();
+  const weekdayLabel = today.toLocaleDateString(undefined, { weekday: 'long' });
   const todayReschedule = reschedules.find((r) => r.fromDate === todayKey);
   const canReschedule =
     !todayRestDay &&
@@ -294,38 +305,68 @@ export function Home({
               progressBadge={`${g.completedInPeriod} / ${g.target} ${g.period}`}
             />
           ))}
-          {visibleAdhoc.map(({ program, exercise }) => (
-            <TodayExerciseCard
-              key={`${program?.id ?? 'catalog'}-${exercise.id}`}
-              program={program}
-              exercise={exercise}
-              todaysInstances={todays.filter(
-                (i) => i.exerciseId === exercise.id,
-              )}
-              onLog={onLogInstance}
-              onUpdate={onUpdateInstance}
-              onDelete={onDeleteInstance}
-              onUpdateProgram={onUpdateProgram}
-              onRemove={() =>
-                setPickedIds((prev) =>
-                  prev.filter((id) => id !== exercise.id),
-                )
+          {visibleAdhoc.map(({ program, exercise }) => {
+            // Whole-day borrows can't be added to a program; specific picks can.
+            const dayBorrowed = dayPickedIds.includes(exercise.id);
+            let onAddToProgram: (() => void) | undefined;
+            if (!dayBorrowed) {
+              if (program) {
+                if (
+                  exercise.schedule.kind === 'weekly-days' &&
+                  !exercise.schedule.days.includes(todayDow)
+                ) {
+                  onAddToProgram = () =>
+                    onUpdateProgram(
+                      scheduleExerciseOnDay(program, exercise.id, todayDow),
+                    );
+                }
+              } else if (sortedActivePrograms.length > 0) {
+                onAddToProgram = () => setAddToProgramFor(exercise);
               }
-            />
-          ))}
+            }
+            return (
+              <TodayExerciseCard
+                key={`${program?.id ?? 'catalog'}-${exercise.id}`}
+                program={program}
+                exercise={exercise}
+                todaysInstances={todays.filter(
+                  (i) => i.exerciseId === exercise.id,
+                )}
+                onLog={onLogInstance}
+                onUpdate={onUpdateInstance}
+                onDelete={onDeleteInstance}
+                onUpdateProgram={onUpdateProgram}
+                onAddToProgram={onAddToProgram}
+                weekdayLabel={weekdayLabel}
+                onRemove={() => {
+                  setPickedIds((prev) =>
+                    prev.filter((id) => id !== exercise.id),
+                  );
+                  setDayPickedIds((prev) =>
+                    prev.filter((id) => id !== exercise.id),
+                  );
+                }}
+              />
+            );
+          })}
           <LogAdhocPicker
             borrowable={borrowable}
             options={pickerOptions}
-            onSelectExercise={(id) =>
+            onSelectExercise={(id) => {
               setPickedIds((prev) =>
                 prev.includes(id) ? prev : [...prev, id],
-              )
-            }
-            onSelectDay={(exerciseIds) =>
+              );
+              // Re-picking specifically clears the day-borrow exclusion.
+              setDayPickedIds((prev) => prev.filter((x) => x !== id));
+            }}
+            onSelectDay={(exerciseIds) => {
               setPickedIds((prev) =>
                 Array.from(new Set([...prev, ...exerciseIds])),
-              )
-            }
+              );
+              setDayPickedIds((prev) =>
+                Array.from(new Set([...prev, ...exerciseIds])),
+              );
+            }}
           />
         </div>
       )}
@@ -364,6 +405,40 @@ export function Home({
         }}
         onCancel={() => setRescheduleModalOpen(false)}
       />
+      {addToProgramFor && (
+        <AddToProgramModal
+          open
+          exercise={addToProgramFor}
+          weekdayLabel={weekdayLabel}
+          programs={sortedActivePrograms}
+          onCancel={() => setAddToProgramFor(null)}
+          onPick={(programId) => {
+            const program = sortedActivePrograms.find(
+              (p) => p.id === programId,
+            );
+            if (program) {
+              // Seed the new exercise's targets from today's log.
+              const loggedForExercise = todays.filter(
+                (i) => i.exerciseId === addToProgramFor.id,
+              );
+              const logged =
+                loggedForExercise[loggedForExercise.length - 1];
+              const newExercise: Exercise = {
+                ...addToProgramFor,
+                schedule: { kind: 'weekly-days', days: [todayDow] },
+                plannedSets: logged
+                  ? plannedFromInstanceSets(
+                      logged.sets,
+                      addToProgramFor.trackingType,
+                    )
+                  : [],
+              };
+              onUpdateProgram(addExerciseToProgram(program, newExercise));
+            }
+            setAddToProgramFor(null);
+          }}
+        />
+      )}
     </div>
   );
 }

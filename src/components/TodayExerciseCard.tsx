@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Pencil, Repeat, Trash2, Undo2, X } from 'lucide-react';
+import { CalendarPlus, Check, Pencil, Repeat, Trash2, Undo2, X } from 'lucide-react';
 import type { Exercise, Instance, InstanceSet, Program } from '../types';
 import { formatDuration, formatPlannedSets } from '../templates';
 import { useSettings } from '../settings';
@@ -34,6 +34,9 @@ type Props = {
   // Enables the "Update program?" prompt when a logged session diverges
   // from plannedSets. Omit for ad-hoc cards to keep the prompt hidden.
   onUpdateProgram?: (program: Program) => void;
+  // Shows the "Add to program?" action; parent owns eligibility. Omit to hide.
+  onAddToProgram?: () => void;
+  weekdayLabel?: string;
   // Switches to the accent treatment so frequency-driven cards visually
   // separate from required day-scheduled cards.
   variant?: 'frequency';
@@ -49,6 +52,8 @@ export function TodayExerciseCard({
   onDelete,
   onRemove,
   onUpdateProgram,
+  onAddToProgram,
+  weekdayLabel,
   variant,
   progressBadge,
 }: Props) {
@@ -298,6 +303,26 @@ export function TodayExerciseCard({
                   <Pencil aria-hidden />
                   Update program?
                 </Button>
+              )}
+              {onAddToProgram && (
+                <Tooltip
+                  label={
+                    program
+                      ? `Schedule ${exercise.name} on ${weekdayLabel}s in ${program.name}`
+                      : `Add ${exercise.name} to a program on ${weekdayLabel}s`
+                  }
+                  side="bottom"
+                >
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={onAddToProgram}
+                    className="border-accent/40 text-accent hover:border-accent hover:bg-accent/10"
+                  >
+                    <CalendarPlus aria-hidden />
+                    Add to program?
+                  </Button>
+                </Tooltip>
               )}
             </div>
           )}
