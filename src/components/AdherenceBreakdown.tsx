@@ -12,6 +12,7 @@ import {
   dateKey,
   exercisesForDay,
   instancesOnDay,
+  isSameDay,
   restDayFor,
   startOfDay,
   startOfTrailingWindow,
@@ -77,6 +78,7 @@ export function AdherenceBreakdown({
       start,
       today,
       reschedules,
+      today,
     )
       .map((r) => ({ ...r, shortfall: r.expected - r.completed }))
       .sort((a, b) => b.shortfall - a.shortfall);
@@ -272,7 +274,11 @@ function ByDayView({
   return (
     <div className="flex flex-col gap-1.5">
       {days.map((d) => {
-        const missed = !d.isRest && d.scheduledDone < d.scheduledCount;
+        // Today isn't over yet — don't flag it as missed just because the
+        // day's scheduled work is still outstanding.
+        const isToday = isSameDay(d.date, today);
+        const missed =
+          !d.isRest && !isToday && d.scheduledDone < d.scheduledCount;
         return (
           <button
             key={d.key}

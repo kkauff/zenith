@@ -479,6 +479,7 @@ export function adherence(
   startDate: Date,
   endDate: Date,
   reschedules?: Reschedule[],
+  dayInProgress?: Date,
 ): number | null {
   const rows = adherenceBreakdown(
     programs,
@@ -487,6 +488,7 @@ export function adherence(
     startDate,
     endDate,
     reschedules,
+    dayInProgress,
   );
   if (rows.length === 0) return null;
 
@@ -510,6 +512,12 @@ export type ExerciseAdherence = {
 // exercises were scheduled, how many were expected, how many logged. Only
 // exercises with a nonzero expectation appear (nothing was owed otherwise).
 // This is what lets the UI answer "which exercise is dragging my % down".
+//
+// `dayInProgress` (typically today): that day isn't over, so its unfulfilled
+// obligations are dropped from `expected` — you shouldn't read as "short" or
+// see a lower % just because you haven't done today's work yet. Work already
+// logged that day still counts (it stays in `completed`), so finishing today's
+// session only ever helps.
 export function adherenceBreakdown(
   programs: Program[],
   instances: Instance[],
@@ -517,21 +525,43 @@ export function adherenceBreakdown(
   startDate: Date,
   endDate: Date,
   reschedules?: Reschedule[],
+  dayInProgress?: Date,
 ): ExerciseAdherence[] {
   const restKeys = new Set(restDays.map((r) => r.date));
   const out: ExerciseAdherence[] = [];
 
   for (const program of programs) {
     for (const exercise of program.exercises) {
-      const expected = expectedForRange(
+      const floor = exerciseCreatedFloor(exercise, program);
+      let expected = expectedForRange(
         exercise.id,
         exercise.schedule,
-        exerciseCreatedFloor(exercise, program),
+        floor,
         startDate,
         endDate,
         restKeys,
         reschedules,
       );
+      if (dayInProgress) {
+        const dayExpected = expectedForRange(
+          exercise.id,
+          exercise.schedule,
+          floor,
+          dayInProgress,
+          dayInProgress,
+          restKeys,
+          reschedules,
+        );
+        const dayCompleted = completedForRange(
+          exercise.id,
+          instances,
+          dayInProgress,
+          dayInProgress,
+        );
+        // Only the still-unmet part of today comes off — a finished today
+        // leaves `expected` intact so it reads as met, not skipped.
+        expected = Math.max(0, expected - Math.max(0, dayExpected - dayCompleted));
+      }
       if (expected === 0) continue;
       const completed = completedForRange(
         exercise.id,
@@ -579,6 +609,7 @@ export function adherencePast7Days(
     startOfTrailingWindow(today, 7),
     today,
     reschedules,
+    today,
   );
 }
 
@@ -596,6 +627,7 @@ export function adherencePast30Days(
     startOfTrailingWindow(today, 30),
     today,
     reschedules,
+    today,
   );
 }
 
