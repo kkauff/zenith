@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CalendarPlus, Check, Pencil, Repeat, Trash2, Undo2, X } from 'lucide-react';
 import type { Exercise, Instance, InstanceSet, Program } from '../types';
-import { formatDuration, formatPlannedSets } from '../templates';
+import { formatDuration, formatPlannedSets, summarizeSets } from '../templates';
 import { useSettings } from '../settings';
 import {
   applySuggestion,
@@ -387,16 +387,4 @@ export function TodayExerciseCard({
       )}
     </Card>
   );
-}
-
-function summarizeSets(inst: Instance): string {
-  return inst.sets
-    .map((s) => {
-      if (s.durationSeconds !== undefined) return formatDuration(s.durationSeconds);
-      if (s.bandColor !== undefined && s.reps !== undefined) return `${s.bandColor}×${s.reps}`;
-      if (s.weight !== undefined && s.reps !== undefined) return `${s.weight}×${s.reps}`;
-      if (s.reps !== undefined) return String(s.reps);
-      return '—';
-    })
-    .join(', ');
 }

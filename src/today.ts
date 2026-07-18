@@ -8,9 +8,13 @@
 //   frequency:   expected = times × range-days / period-days  (rough
 //                proration; period-days is 7 for week, 30 for month).
 //
-// The math falls out cleanly: a monthly goal of 10 produces expected≈5 by
-// mid-month, expected≈10 by month end. A weekly-days goal of M/W/F produces
-// expected=3 over a full week. Both can sum into the same number.
+// The math falls out cleanly: over a rolling 30-day window a monthly goal of
+// 10 produces expected≈10, and a weekly-days goal of M/W/F produces expected=3
+// over any 7-day window. Both can sum into the same number.
+//
+// The adherence rings use trailing windows ending today (past 7 / past 30
+// days) rather than calendar week/month, so you aren't judged against a full
+// period's plan before the days to meet it have elapsed.
 //
 // Occurrences before a program's createdAt don't count against you (you
 // can't have failed to do something the plan didn't exist for yet).
@@ -166,6 +170,7 @@ export function exercisesForDay(
 ): ScheduledExercise[] {
   const dow = date.getDay();
   const key = dateKey(date);
+  const dayStart = startOfDay(date).getTime();
   const movedAway = new Set<string>();
   const movedIn: string[] = [];
   if (reschedules) {
@@ -183,6 +188,11 @@ export function exercisesForDay(
   const seen = new Set<string>();
   for (const program of programs) {
     for (const exercise of program.exercises) {
+      // An exercise isn't "scheduled" on days before it was added — this
+      // keeps recently-added exercises from reading as missed in the past.
+      if (startOfDay(new Date(exerciseCreatedFloor(exercise, program))).getTime() > dayStart) {
+        continue;
+      }
       if (
         exercise.schedule.kind === 'weekly-days' &&
         exercise.schedule.days.includes(dow) &&
@@ -368,24 +378,37 @@ function periodDays(period: 'week' | 'month'): number {
   return period === 'week' ? 7 : 30;
 }
 
+// When an exercise started counting: its own add-date, or the program's
+// createdAt for exercises saved before per-exercise stamps existed.
+export function exerciseCreatedFloor(
+  exercise: Exercise,
+  program: Program,
+): number {
+  return exercise.createdAt ?? program.createdAt;
+}
+
 // "Should-do" count for this exercise across [startDate, endDate]:
 //   weekly-days: days in range matching schedule.days (minus rest days,
 //                minus rescheduled-away days, plus rescheduled-in days).
 //   frequency:   times × range-days / period-days, linear in days so
 //                cross-period boundaries need no special handling.
+//
+// `createdFloor` is when this exercise entered the program (its own
+// createdAt, or the program's as a fallback). Days before it are never
+// counted — you can't miss an exercise the program didn't include yet.
 function expectedForRange(
   exerciseId: string,
   schedule: Schedule,
-  programCreatedAt: number,
+  createdFloor: number,
   startDate: Date,
   endDate: Date,
   restDayKeys?: ReadonlySet<string>,
   reschedules?: Reschedule[],
 ): number {
-  const programStart = startOfDay(new Date(programCreatedAt));
-  const start = startOfDay(startDate) > programStart
+  const floorStart = startOfDay(new Date(createdFloor));
+  const start = startOfDay(startDate) > floorStart
     ? startOfDay(startDate)
-    : programStart;
+    : floorStart;
   const end = startOfDay(endDate);
   if (end < start) return 0;
 
@@ -447,7 +470,8 @@ function completedForRange(
 }
 
 // Returns null when nothing was scheduled in the range — UI can show "—" to
-// distinguish "no plan" from "0% completion".
+// distinguish "no plan" from "0% completion". Rolls up the per-exercise
+// breakdown so the ring and the "which exercise is short" list can't drift.
 export function adherence(
   programs: Program[],
   instances: Instance[],
@@ -456,16 +480,53 @@ export function adherence(
   endDate: Date,
   reschedules?: Reschedule[],
 ): number | null {
-  const restKeys = new Set(restDays.map((r) => r.date));
+  const rows = adherenceBreakdown(
+    programs,
+    instances,
+    restDays,
+    startDate,
+    endDate,
+    reschedules,
+  );
+  if (rows.length === 0) return null;
+
   let totalExpected = 0;
   let totalCompleted = 0;
+  for (const r of rows) {
+    totalExpected += r.expected;
+    totalCompleted += r.completed;
+  }
+  return (totalCompleted / totalExpected) * 100;
+}
+
+export type ExerciseAdherence = {
+  program: Program;
+  exercise: Exercise;
+  expected: number;
+  completed: number;
+};
+
+// Per-exercise decomposition of `adherence` over the same range: which
+// exercises were scheduled, how many were expected, how many logged. Only
+// exercises with a nonzero expectation appear (nothing was owed otherwise).
+// This is what lets the UI answer "which exercise is dragging my % down".
+export function adherenceBreakdown(
+  programs: Program[],
+  instances: Instance[],
+  restDays: RestDay[],
+  startDate: Date,
+  endDate: Date,
+  reschedules?: Reschedule[],
+): ExerciseAdherence[] {
+  const restKeys = new Set(restDays.map((r) => r.date));
+  const out: ExerciseAdherence[] = [];
 
   for (const program of programs) {
     for (const exercise of program.exercises) {
       const expected = expectedForRange(
         exercise.id,
         exercise.schedule,
-        program.createdAt,
+        exerciseCreatedFloor(exercise, program),
         startDate,
         endDate,
         restKeys,
@@ -478,13 +539,11 @@ export function adherence(
         startDate,
         endDate,
       );
-      totalExpected += expected;
-      totalCompleted += completed;
+      out.push({ program, exercise, expected, completed });
     }
   }
 
-  if (totalExpected === 0) return null;
-  return (totalCompleted / totalExpected) * 100;
+  return out;
 }
 
 export function adherenceToday(
@@ -497,25 +556,16 @@ export function adherenceToday(
   return adherence(programs, instances, restDays, today, today, reschedules);
 }
 
-export function adherenceWeek(
-  programs: Program[],
-  instances: Instance[],
-  restDays: RestDay[],
-  today: Date,
-  reschedules?: Reschedule[],
-  weekStartDay: 0 | 1 | 2 | 3 | 4 | 5 | 6 = 1,
-): number | null {
-  return adherence(
-    programs,
-    instances,
-    restDays,
-    startOfWeek(today, weekStartDay),
-    today,
-    reschedules,
-  );
+// Rolling window ending today, so early in a calendar week you aren't
+// judged against a full week's plan you haven't had the days to meet yet.
+// `days` days back inclusive of today (7 → [today-6, today]).
+export function startOfTrailingWindow(today: Date, days: number): Date {
+  const start = startOfDay(today);
+  start.setDate(start.getDate() - (days - 1));
+  return start;
 }
 
-export function adherenceMonth(
+export function adherencePast7Days(
   programs: Program[],
   instances: Instance[],
   restDays: RestDay[],
@@ -526,94 +576,26 @@ export function adherenceMonth(
     programs,
     instances,
     restDays,
-    startOfMonth(today),
+    startOfTrailingWindow(today, 7),
     today,
     reschedules,
   );
 }
 
-export type DayAdherence = {
-  date: Date;
-  expected: number;
-  completed: number;
-};
-
-// One entry per day across [startDate, endDate]. `expected` is fractional
-// for frequency schedules (2/week → 0.286/day). `filter` is OR across
-// dimensions — a (day, exercise) is included if ANY active filter matches.
-export function dailyAdherence(
+export function adherencePast30Days(
   programs: Program[],
   instances: Instance[],
   restDays: RestDay[],
-  startDate: Date,
-  endDate: Date,
-  filter?: {
-    programIds?: ReadonlySet<string>;
-    weekdays?: ReadonlySet<number>;
-  },
+  today: Date,
   reschedules?: Reschedule[],
-): DayAdherence[] {
-  const start = startOfDay(startDate);
-  const end = startOfDay(endDate);
-  const restKeys = new Set(restDays.map((r) => r.date));
-  const hasFilter = !!(
-    filter?.programIds?.size || filter?.weekdays?.size
+): number | null {
+  return adherence(
+    programs,
+    instances,
+    restDays,
+    startOfTrailingWindow(today, 30),
+    today,
+    reschedules,
   );
-  const out: DayAdherence[] = [];
-  for (
-    const cursor = new Date(start);
-    cursor <= end;
-    cursor.setDate(cursor.getDate() + 1)
-  ) {
-    const day = new Date(cursor);
-    const weekday = day.getDay();
-    // Emit a row so chart layers can mark rest days, but zero expected so
-    // they don't sink the adherence average.
-    if (restKeys.has(dateKey(day))) {
-      out.push({ date: day, expected: 0, completed: 0 });
-      continue;
-    }
-    let expected = 0;
-    let completed = 0;
-    for (const program of programs) {
-      for (const exercise of program.exercises) {
-        if (hasFilter) {
-          const progMatch = filter?.programIds?.has(program.id) ?? false;
-          const dayMatch = filter?.weekdays?.has(weekday) ?? false;
-          if (!progMatch && !dayMatch) continue;
-        }
-        const exp = expectedForRange(
-          exercise.id,
-          exercise.schedule,
-          program.createdAt,
-          day,
-          day,
-          undefined,
-          reschedules,
-        );
-        if (exp === 0) continue;
-        const com = completedForRange(exercise.id, instances, day, day);
-        expected += exp;
-        completed += com;
-      }
-    }
-    out.push({ date: day, expected, completed });
-  }
-  return out;
 }
 
-// Same OR semantics as dailyAdherence. Used for views that operate on
-// instances directly (e.g. time-of-day histogram).
-export function instanceMatchesFilter(
-  inst: Instance,
-  filter: {
-    programIds?: ReadonlySet<string>;
-    weekdays?: ReadonlySet<number>;
-  },
-): boolean {
-  const hasFilter = !!(filter.programIds?.size || filter.weekdays?.size);
-  if (!hasFilter) return true;
-  if (inst.programId && filter.programIds?.has(inst.programId)) return true;
-  if (filter.weekdays?.has(new Date(inst.loggedAt).getDay())) return true;
-  return false;
-}

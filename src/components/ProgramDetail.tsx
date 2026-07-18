@@ -25,6 +25,7 @@ import {
   formatPlannedSets,
   formatSchedule,
   getCategory,
+  summarizeSets,
 } from '../templates';
 import * as store from '../storage';
 import { effectiveExerciseTags } from '../instance';
@@ -985,18 +986,5 @@ export function ProgramDetail({
       />
     </div>
   );
-}
-
-function summarizeSets(inst: Instance): string {
-  if (inst.sets.length === 0) return 'No sets recorded';
-  return inst.sets
-    .map((s) => {
-      if (s.durationSeconds !== undefined) return formatDuration(s.durationSeconds);
-      if (s.bandColor !== undefined && s.reps !== undefined) return `${s.bandColor}×${s.reps}`;
-      if (s.weight !== undefined && s.reps !== undefined) return `${s.weight}×${s.reps}`;
-      if (s.reps !== undefined) return String(s.reps);
-      return '—';
-    })
-    .join(', ');
 }
 

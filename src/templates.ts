@@ -6,7 +6,13 @@ import {
   Wind,
   type LucideIcon,
 } from 'lucide-react';
-import type { PlannedSet, RepsTarget, Schedule, TrackingType } from './types';
+import type {
+  Instance,
+  PlannedSet,
+  RepsTarget,
+  Schedule,
+  TrackingType,
+} from './types';
 
 export type CategoryTemplate = {
   key: string;
@@ -123,6 +129,24 @@ export function formatDuration(seconds: number): string {
 
 export function splitDuration(seconds: number): { min: number; sec: number } {
   return { min: Math.floor(seconds / 60), sec: seconds % 60 };
+}
+
+// One-line summary of an instance's logged sets, e.g. "185×5, 185×5" or
+// "0:30, 0:30". Handles every tracking type: time (duration), band (color ×
+// reps), weight (weight × reps), and bare count (reps only).
+export function summarizeSets(inst: Instance): string {
+  if (inst.sets.length === 0) return 'No sets recorded';
+  return inst.sets
+    .map((s) => {
+      if (s.durationSeconds !== undefined) return formatDuration(s.durationSeconds);
+      if (s.bandColor !== undefined && s.reps !== undefined)
+        return `${s.bandColor}×${s.reps}`;
+      if (s.weight !== undefined && s.reps !== undefined)
+        return `${s.weight}×${s.reps}`;
+      if (s.reps !== undefined) return String(s.reps);
+      return '—';
+    })
+    .join(', ');
 }
 
 // --- Planned-set summary --------------------------------------------------

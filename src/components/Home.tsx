@@ -3,6 +3,7 @@ import { CalendarClock, Heart, Plus, Undo2 } from 'lucide-react';
 import type {
   Exercise,
   Instance,
+  InstanceDraft,
   Program,
   Reschedule,
   RestDay,
@@ -28,6 +29,7 @@ import {
   scheduleExerciseOnDay,
 } from '../program-suggestion';
 import { ActiveProgramsPanel } from './ActiveProgramsPanel';
+import { AdherenceBreakdown } from './AdherenceBreakdown';
 import { AddToProgramModal } from './AddToProgramModal';
 import { type PickerOption } from './ExercisePicker';
 import { LogAdhocPicker } from './LogAdhocPicker';
@@ -50,7 +52,7 @@ type Props = {
   onSeeProgress: () => void;
   onManagePrograms: () => void;
   onOpenProgram: (programId: string) => void;
-  onLogInstance: (fields: Omit<Instance, 'id' | 'loggedAt'>) => void;
+  onLogInstance: (fields: InstanceDraft) => void;
   onUpdateInstance: (instance: Instance) => void;
   onDeleteInstance: (id: string) => void;
   onUpdateProgram: (program: Program) => void;
@@ -382,6 +384,16 @@ export function Home({
         programs={sortedActivePrograms}
         onOpen={(programId) => onOpenProgram(programId)}
         onManage={onManagePrograms}
+      />
+      <AdherenceBreakdown
+        programs={programs}
+        instances={instances}
+        restDays={restDays}
+        reschedules={reschedules}
+        today={today}
+        onLogInstance={onLogInstance}
+        onUpdateInstance={onUpdateInstance}
+        onDeleteInstance={onDeleteInstance}
       />
       <RestDayModal
         open={restModalOpen}
