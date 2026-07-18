@@ -1,6 +1,9 @@
 import type { Instance, Program, Reschedule, RestDay } from '../types';
-import { adherenceMonth, adherenceToday, adherenceWeek } from '../today';
-import { useSettings } from '../settings';
+import {
+  adherencePast30Days,
+  adherencePast7Days,
+  adherenceToday,
+} from '../today';
 import { ProgressRing } from './ProgressRing';
 import { Button } from './ui/button';
 
@@ -21,17 +24,15 @@ export function ProgressSummaryPanel({
   today,
   onSeeMore,
 }: Props) {
-  const { weekStartDay } = useSettings();
   const day = adherenceToday(programs, instances, restDays, today, reschedules);
-  const week = adherenceWeek(
+  const week = adherencePast7Days(
     programs,
     instances,
     restDays,
     today,
     reschedules,
-    weekStartDay,
   );
-  const month = adherenceMonth(
+  const month = adherencePast30Days(
     programs,
     instances,
     restDays,
@@ -45,9 +46,9 @@ export function ProgressSummaryPanel({
         Progress
       </div>
       <div className="flex justify-around gap-3">
-        <ProgressRing percent={day} label="Day" size={72} />
-        <ProgressRing percent={week} label="Week" size={72} />
-        <ProgressRing percent={month} label="Month" size={72} />
+        <ProgressRing percent={day} label="Today" size={72} />
+        <ProgressRing percent={week} label="7 days" size={72} />
+        <ProgressRing percent={month} label="30 days" size={72} />
       </div>
       <Button variant="secondary" size="sm" onClick={onSeeMore}>
         See more

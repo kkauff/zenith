@@ -13,6 +13,7 @@ import { db } from './firebase';
 import type {
   Exercise,
   Instance,
+  InstanceDraft,
   LibraryExercise,
   PlannedSet,
   Program,
@@ -224,9 +225,13 @@ export function subscribeInstances(
 
 export async function addInstance(
   userId: string,
-  fields: Omit<Instance, 'id' | 'loggedAt'>,
+  fields: InstanceDraft,
 ): Promise<Instance> {
-  const instance: Instance = { ...fields, id: uid(), loggedAt: Date.now() };
+  const instance: Instance = {
+    ...fields,
+    id: uid(),
+    loggedAt: fields.loggedAt ?? Date.now(),
+  };
   await setDoc(doc(instancesCol(userId), instance.id), stripUndefined(instance));
   return instance;
 }

@@ -12,15 +12,22 @@ export type PickerOption = {
 type Props = {
   options: PickerOption[];
   onSelect: (id: string) => void;
+  // Notifies the parent when the dropdown opens/closes — lets a containing
+  // modal keep its own Escape-to-close from firing while the dropdown is open.
+  onOpenChange?: (open: boolean) => void;
 };
 
 // Searchable dropdown. Trigger button reveals an input + filtered list;
 // picking an option fires onSelect and closes. Outside-click and Escape
 // dismiss without choosing.
-export function ExercisePicker({ options, onSelect }: Props) {
+export function ExercisePicker({ options, onSelect, onOpenChange }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [open, onOpenChange]);
 
   useEffect(() => {
     if (!open) return;

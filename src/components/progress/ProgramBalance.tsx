@@ -17,8 +17,7 @@ import {
   setCountByMuscle,
   setCountDirection,
 } from '../../progress-metrics';
-import { useSettings } from '../../settings';
-import { startOfWeek } from '../../today';
+import { startOfDay } from '../../today';
 import { Card, CardTitle } from '../ui/card';
 import { cn } from '@/lib/utils';
 
@@ -37,16 +36,19 @@ const BODY_COLOR = '#1a2436';
 const INTENSITY_COLORS = ['#3a2a8a', '#6a4ad8', '#8a6dff'];
 
 export function ProgramBalance({ programs, instances, library, today }: Props) {
-  const { weekStartDay } = useSettings();
-
+  // Rolling past-7-days window (vs the prior 7 days for the trend arrows),
+  // so the split doesn't collapse to a single day every Monday. Windows are
+  // half-open [start, end); `thisEnd` is the start of tomorrow so today's
+  // sets are included.
   const { thisStart, thisEnd, lastStart } = useMemo(() => {
-    const thisStart = startOfWeek(today, weekStartDay);
-    const thisEnd = new Date(thisStart);
-    thisEnd.setDate(thisEnd.getDate() + 7);
+    const thisEnd = startOfDay(today);
+    thisEnd.setDate(thisEnd.getDate() + 1);
+    const thisStart = new Date(thisEnd);
+    thisStart.setDate(thisStart.getDate() - 7);
     const lastStart = new Date(thisStart);
     lastStart.setDate(lastStart.getDate() - 7);
     return { thisStart, thisEnd, lastStart };
-  }, [today, weekStartDay]);
+  }, [today]);
 
   const tagCounts = useMemo(
     () => setCountByBalanceTag(instances, programs, library, thisStart, thisEnd),
@@ -84,10 +86,10 @@ export function ProgramBalance({ programs, instances, library, today }: Props) {
   if (totalSetsThisWeek === 0) {
     return (
       <Card className="flex flex-col gap-3">
-        <CardTitle>Program balance — this week</CardTitle>
+        <CardTitle>Program balance — past 7 days</CardTitle>
         <p className="italic text-sm text-muted-foreground m-0 py-3">
-          No tagged sets logged this week. Tag your exercises with push,
-          pull, legs, or core to see your training split.
+          No tagged sets logged in the past 7 days. Tag your exercises with
+          push, pull, legs, or core to see your training split.
         </p>
       </Card>
     );
@@ -98,7 +100,7 @@ export function ProgramBalance({ programs, instances, library, today }: Props) {
 
   return (
     <Card className="flex flex-col gap-4">
-      <CardTitle>Program balance — this week</CardTitle>
+      <CardTitle>Program balance — past 7 days</CardTitle>
 
       <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start sm:justify-center sm:gap-1">
         <div className="flex flex-row gap-1 sm:gap-2">
@@ -206,10 +208,10 @@ function calloutKey(c: BalanceCallout): string {
 function CalloutRow({ callout }: { callout: BalanceCallout }) {
   const text =
     callout.kind === 'zero-volume'
-      ? `No ${BALANCE_TAG_LABEL[callout.group].toLowerCase()} sets this week.`
+      ? `No ${BALANCE_TAG_LABEL[callout.group].toLowerCase()} sets in the past 7 days.`
       : callout.direction === 'push'
-        ? `Push-heavy: ${callout.pushSets} push vs ${callout.pullSets} pull this week. Watch for shoulder strain.`
-        : `Pull-heavy: ${callout.pullSets} pull vs ${callout.pushSets} push this week.`;
+        ? `Push-heavy: ${callout.pushSets} push vs ${callout.pullSets} pull in the past 7 days. Watch for shoulder strain.`
+        : `Pull-heavy: ${callout.pullSets} pull vs ${callout.pushSets} push in the past 7 days.`;
   return (
     <div
       className={cn(

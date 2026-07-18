@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppHeader, type NavView } from './components/AppHeader';
 import { Login } from './components/Login';
 import { Home } from './components/Home';
@@ -15,6 +15,7 @@ import * as store from './storage';
 import type { AuthUser } from './auth';
 import type {
   Instance,
+  InstanceDraft,
   LibraryExercise,
   Program,
   Reschedule,
@@ -169,13 +170,61 @@ export default function App() {
     await store.updateProgram(user.sub, program);
   };
 
+  // One-time backfill: exercises saved before per-exercise `createdAt` existed
+  // fall back to the program's createdAt, which wrongly counts an exercise
+  // added to an old program as "missed" on days before it was added. Stamp
+  // each legacy exercise with its first logged session as the floor (the best
+  // proxy for "when I started it"), or the program's createdAt if never
+  // logged. Runs once per load; self-terminates once everything is stamped.
+  // Tracks which user we've already backfilled, so switching accounts in the
+  // same session re-runs the migration for the new user's data.
+  const backfilledUserRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user || backfilledUserRef.current === user.sub) return;
+    if (!loaded.programs || !loaded.instances) return;
+    const needs = programs.some((p) =>
+      p.exercises.some((e) => e.createdAt === undefined),
+    );
+    if (!needs) {
+      backfilledUserRef.current = user.sub;
+      return;
+    }
+    backfilledUserRef.current = user.sub;
+
+    const firstLogged = new Map<string, number>();
+    for (const i of instances) {
+      const prev = firstLogged.get(i.exerciseId);
+      if (prev === undefined || i.loggedAt < prev) {
+        firstLogged.set(i.exerciseId, i.loggedAt);
+      }
+    }
+
+    for (const p of programs) {
+      let changed = false;
+      const exercises = p.exercises.map((e) => {
+        if (e.createdAt !== undefined) return e;
+        changed = true;
+        return {
+          ...e,
+          createdAt: firstLogged.get(e.id) ?? p.createdAt,
+        };
+      });
+      if (changed) {
+        // Best-effort migration; swallow write failures (a fresh page load
+        // resets the ref and retries) rather than throw an unhandled rejection
+        // or retry-storm within the session.
+        void store.updateProgram(user.sub, { ...p, exercises }).catch(() => {});
+      }
+    }
+  }, [user, loaded.programs, loaded.instances, programs, instances]);
+
   const deleteProgram = async (programId: string) => {
     if (!user) return;
     await store.deleteProgram(user.sub, programId);
     setView({ kind: 'programs' });
   };
 
-  const addInstance = async (fields: Omit<Instance, 'id' | 'loggedAt'>) => {
+  const addInstance = async (fields: InstanceDraft) => {
     if (!user) return;
     await store.addInstance(user.sub, fields);
   };

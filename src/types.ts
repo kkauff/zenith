@@ -134,6 +134,11 @@ export type Exercise = {
   goalDurationSeconds?: number;
   tags?: ExerciseTag[];
   movements?: MovementPattern[];
+  // When the exercise was added to its program. Adherence/scheduling never
+  // count an exercise before this date — you can't have missed something the
+  // program didn't include yet. Optional for backward compatibility; callers
+  // fall back to the program's createdAt when absent.
+  createdAt?: number;
 };
 
 export type Program = {
@@ -223,4 +228,11 @@ export type Instance = {
   loggedAt: number;
   sets: InstanceSet[];
   notes?: string;
+};
+
+// Fields for creating an Instance. `loggedAt` is optional: it defaults to now
+// for the normal "log today" path, or is set explicitly to backfill a session
+// onto a past day.
+export type InstanceDraft = Omit<Instance, 'id' | 'loggedAt'> & {
+  loggedAt?: number;
 };

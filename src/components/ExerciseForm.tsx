@@ -321,6 +321,8 @@ export function ExerciseForm({ categoryKey, initial, onSave, onCancel }: Props) 
       goalDurationSeconds: goalDurationNum,
       tags: mergedTags.length > 0 ? mergedTags : undefined,
       movements: showMovements && movements.length > 0 ? movements : undefined,
+      // Preserve the original add-date on edit; stamp now for new exercises.
+      createdAt: initial?.createdAt ?? Date.now(),
     });
   };
 
